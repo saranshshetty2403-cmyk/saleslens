@@ -29,6 +29,13 @@
       "when": 1776190813800,
       "tag": "0003_condemned_colleen_wing",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "5",
+      "when": 1776200772711,
+      "tag": "0004_special_shen",
+      "breakpoints": true
     }
   ]
 }

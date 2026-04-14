@@ -136,7 +136,7 @@ export default function ActionItems() {
         <div className="space-y-2">
           <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Open ({open.length})</p>
           {open.map((item) => (
-            <ActionRow key={item.id} item={item} onUpdate={(data) => updateMutation.mutate({ id: item.id, ...data })} />
+            <ActionRow key={item.id} item={item} onUpdate={(data) => updateMutation.mutate({ id: item.id, data })} />
           ))}
         </div>
       )}
@@ -146,7 +146,7 @@ export default function ActionItems() {
         <div className="space-y-2">
           <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Completed ({done.length})</p>
           {done.map((item) => (
-            <ActionRow key={item.id} item={item} onUpdate={(data) => updateMutation.mutate({ id: item.id, ...data })} />
+            <ActionRow key={item.id} item={item} onUpdate={(data) => updateMutation.mutate({ id: item.id, data })} />
           ))}
         </div>
       )}

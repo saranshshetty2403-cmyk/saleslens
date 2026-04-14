@@ -8,12 +8,18 @@ import {
   ChevronRight,
   GitBranch,
   LayoutDashboard,
+  Mail,
   Menu,
   Mic,
   Plus,
+  Presentation,
   Settings,
+  Shield,
+  Swords,
   TrendingUp,
+  Users,
   Video,
+  Wand2,
   X,
 } from "lucide-react";
 import { useEffect, useState } from "react";
@@ -29,11 +35,27 @@ const navItems = [
     ],
   },
   {
-    group: "Intelligence",
+    group: "AI Analysis",
     items: [
-      { label: "Analysis", icon: Activity, path: "/analysis" },
+      { label: "Analyze Transcript", icon: Wand2, path: "/analyze" },
       { label: "SPICED Reports", icon: TrendingUp, path: "/spiced" },
       { label: "MEDDPICC Reports", icon: BarChart3, path: "/meddpicc" },
+      { label: "AI Analysis", icon: Activity, path: "/analysis" },
+    ],
+  },
+  {
+    group: "Sales Tools",
+    items: [
+      { label: "Email Generator", icon: Mail, path: "/email" },
+      { label: "Prospect Queue", icon: Users, path: "/prospects" },
+      { label: "Deck Generator", icon: Presentation, path: "/deck" },
+    ],
+  },
+  {
+    group: "Intelligence",
+    items: [
+      { label: "Battlecards", icon: Swords, path: "/battlecards" },
+      { label: "Objection Library", icon: Shield, path: "/objections" },
     ],
   },
   {
@@ -104,7 +126,10 @@ export default function SalesLayout({ children }: SalesLayoutProps) {
             )}
             <ul className="space-y-0.5">
               {group.items.map((item) => {
-                const isActive = location === item.path;
+                const isActive =
+                  item.path === "/"
+                    ? location === "/"
+                    : location.startsWith(item.path);
                 return (
                   <li key={item.path}>
                     <Link href={item.path}>

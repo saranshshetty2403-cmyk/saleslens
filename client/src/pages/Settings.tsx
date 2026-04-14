@@ -55,8 +55,8 @@ export default function Settings() {
     }
   }, [settings]);
 
-  const ollamaOk = health?.ollama?.running;
-  const whisperOk = health?.whisper?.running;
+  const ollamaOk = health?.ollama?.status === "online";
+  const whisperOk = health?.whisper?.status === "online";
 
   return (
     <div className="p-4 sm:p-6 max-w-3xl mx-auto space-y-6">
@@ -108,14 +108,12 @@ export default function Settings() {
                 <div>
                   <p className="text-sm font-medium">Ollama LLM</p>
                   <p className="text-xs text-muted-foreground">
-                    {health?.ollama?.models?.length
-                      ? `${health.ollama.models.length} model(s) available`
-                      : form.ollamaEndpoint}
+                    {form.ollamaEndpoint}
                   </p>
                 </div>
               </div>
               <div className="flex items-center gap-2">
-                {health?.ollama?.models?.includes(form.ollamaModel) && (
+                {ollamaOk && (
                   <Badge variant="outline" className="text-xs border-blue-500/30 text-blue-400">
                     {form.ollamaModel}
                   </Badge>

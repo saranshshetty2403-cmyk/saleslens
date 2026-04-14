@@ -16,18 +16,35 @@ import ActionItems from "./pages/ActionItems";
 import DealTimeline from "./pages/DealTimeline";
 import Notes from "./pages/Notes";
 import Settings from "./pages/Settings";
+import Analyze from "./pages/Analyze";
+import EmailGenerator from "./pages/EmailGenerator";
+import ProspectQueue from "./pages/ProspectQueue";
+import DeckGenerator from "./pages/DeckGenerator";
+import Battlecards from "./pages/Battlecards";
+import ObjectionLibrary from "./pages/ObjectionLibrary";
 
 function Router() {
   return (
     <SalesLayout>
       <Switch>
         <Route path="/" component={Dashboard} />
+        {/* Meetings */}
         <Route path="/meetings" component={Meetings} />
         <Route path="/meetings/new" component={NewMeeting} />
         <Route path="/meetings/:id" component={MeetingDetail} />
+        {/* AI Analysis */}
+        <Route path="/analyze" component={Analyze} />
         <Route path="/analysis" component={Analysis} />
         <Route path="/spiced" component={SpicedReports} />
         <Route path="/meddpicc" component={MeddpiccReports} />
+        {/* Sales Tools */}
+        <Route path="/email" component={EmailGenerator} />
+        <Route path="/prospects" component={ProspectQueue} />
+        <Route path="/deck" component={DeckGenerator} />
+        {/* Intelligence */}
+        <Route path="/battlecards" component={Battlecards} />
+        <Route path="/objections" component={ObjectionLibrary} />
+        {/* Workflow */}
         <Route path="/actions" component={ActionItems} />
         <Route path="/timeline" component={DealTimeline} />
         <Route path="/notes" component={Notes} />

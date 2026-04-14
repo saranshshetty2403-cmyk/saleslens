@@ -234,3 +234,117 @@ export const appSettings = mysqlTable("app_settings", {
 });
 export type AppSettings = typeof appSettings.$inferSelect;
 export type InsertAppSettings = typeof appSettings.$inferInsert;
+
+// ─── Pitch Coaching ───────────────────────────────────────────────────────────
+export const pitchCoaching = mysqlTable("pitch_coaching", {
+  id: int("id").autoincrement().primaryKey(),
+  meetingId: int("meetingId").notNull().unique(),
+  overallScore: float("overallScore"),
+  talkTimeRatio: float("talkTimeRatio"), // rep's % of talk time
+  discoveryScore: float("discoveryScore"),
+  objectionScore: float("objectionScore"),
+  valueScore: float("valueScore"),
+  nextStepScore: float("nextStepScore"),
+  closingScore: float("closingScore"),
+  moments: json("moments").$type<CoachingMoment[]>(),
+  strengths: json("strengths").$type<string[]>(),
+  improvements: json("improvements").$type<string[]>(),
+  missedOpportunities: json("missedOpportunities").$type<string[]>(),
+  competitorsMentioned: json("competitorsMentioned").$type<string[]>(),
+  battlecardUsed: boolean("battlecardUsed").default(false),
+  meddpiccCoverage: float("meddpiccCoverage"), // % of MEDDPICC fields addressed
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type PitchCoaching = typeof pitchCoaching.$inferSelect;
+export type InsertPitchCoaching = typeof pitchCoaching.$inferInsert;
+
+export type CoachingMoment = {
+  timestamp?: number;
+  speaker: string;
+  whatWasSaid: string;
+  whatShouldHaveBeenSaid: string;
+  why: string;
+  category: "discovery" | "objection" | "value_prop" | "closing" | "competitor" | "product_fit" | "general";
+  severity: "low" | "medium" | "high";
+};
+
+// ─── Pre-Call Intelligence ────────────────────────────────────────────────────
+export const preCallIntelligence = mysqlTable("pre_call_intelligence", {
+  id: int("id").autoincrement().primaryKey(),
+  meetingId: int("meetingId").notNull().unique(),
+  companyName: varchar("companyName", { length: 255 }),
+  companyDomain: varchar("companyDomain", { length: 255 }),
+  industry: varchar("industry", { length: 128 }),
+  companySize: varchar("companySize", { length: 64 }),
+  fundingStage: varchar("fundingStage", { length: 64 }),
+  recentNews: json("recentNews").$type<string[]>(),
+  techStack: json("techStack").$type<string[]>(),
+  currentTools: json("currentTools").$type<string[]>(), // known assessment/hiring tools they use
+  triggerEvents: json("triggerEvents").$type<TriggerEvent[]>(),
+  prepBullets: json("prepBullets").$type<PrepBullet[]>(),
+  suggestedOpening: text("suggestedOpening"),
+  leadWithProduct: varchar("leadWithProduct", { length: 128 }), // which HE product to lead with
+  buyerPersona: varchar("buyerPersona", { length: 128 }),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type PreCallIntelligence = typeof preCallIntelligence.$inferSelect;
+export type InsertPreCallIntelligence = typeof preCallIntelligence.$inferInsert;
+
+export type TriggerEvent = {
+  event: string;
+  relevance: string; // why this matters for HackerEarth pitch
+  urgency: "low" | "medium" | "high";
+};
+
+export type PrepBullet = {
+  point: string;
+  why: string; // context/rationale
+  source?: string;
+};
+
+// ─── Prospects (Lead Generation Queue) ───────────────────────────────────────
+export const prospects = mysqlTable("prospects", {
+  id: int("id").autoincrement().primaryKey(),
+  sourceCompanyName: varchar("sourceCompanyName", { length: 255 }), // company from transcript that led to this prospect
+  prospectCompanyName: varchar("prospectCompanyName", { length: 255 }).notNull(),
+  prospectDomain: varchar("prospectDomain", { length: 255 }),
+  industry: varchar("industry", { length: 128 }),
+  companySize: varchar("companySize", { length: 64 }),
+  fundingStage: varchar("fundingStage", { length: 64 }),
+  contactName: varchar("contactName", { length: 255 }),
+  contactTitle: varchar("contactTitle", { length: 255 }),
+  contactLinkedin: varchar("contactLinkedin", { length: 512 }),
+  fitReason: text("fitReason"), // why this company is a good HE prospect
+  outreachAngle: text("outreachAngle"), // specific HE product angle for this prospect
+  triggerEvent: text("triggerEvent"), // what makes this timely
+  suggestedProduct: varchar("suggestedProduct", { length: 128 }), // HE product to lead with
+  status: mysqlEnum("status", ["to_contact", "contacted", "in_progress", "converted", "not_a_fit"]).notNull().default("to_contact"),
+  notes: text("notes"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type Prospect = typeof prospects.$inferSelect;
+export type InsertProspect = typeof prospects.$inferInsert;
+
+// ─── Generated Emails ─────────────────────────────────────────────────────────
+export const generatedEmails = mysqlTable("generated_emails", {
+  id: int("id").autoincrement().primaryKey(),
+  meetingId: int("meetingId"), // optional — can generate email without a meeting
+  prospectId: int("prospectId"), // optional — can link to a prospect
+  emailType: mysqlEnum("emailType", ["follow_up", "cold_outreach", "objection_response", "demo_follow_up", "proposal_follow_up", "custom"]).notNull().default("follow_up"),
+  subject: varchar("subject", { length: 512 }),
+  body: text("body"),
+  context: text("context"), // what the user told the AI about this email
+  recipientName: varchar("recipientName", { length: 255 }),
+  recipientTitle: varchar("recipientTitle", { length: 255 }),
+  recipientCompany: varchar("recipientCompany", { length: 255 }),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+export type GeneratedEmail = typeof generatedEmails.$inferSelect;
+export type InsertGeneratedEmail = typeof generatedEmails.$inferInsert;

@@ -36,13 +36,11 @@ const STATUS_LABELS: Record<string, string> = {
 
 export default function Meetings() {
   const [search, setSearch] = useState("");
-  const { data: meetings, isLoading } = trpc.meetings.list.useQuery({ limit: 100, offset: 0 });
-  const { data: searchResults } = trpc.meetings.search.useQuery(
-    { query: search },
-    { enabled: search.length > 1 }
+  const { data: meetings, isLoading } = trpc.meetings.list.useQuery(
+    search.length > 1 ? { limit: 100, offset: 0, search } : { limit: 100, offset: 0 }
   );
 
-  const displayed = search.length > 1 ? searchResults : meetings;
+  const displayed = meetings;
 
   return (
     <div className="p-4 sm:p-6 space-y-4 sm:space-y-5">

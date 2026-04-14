@@ -1,73 +1,45 @@
+import { useState } from "react";
+import { useParams, Link } from "wouter";
 import { trpc } from "@/lib/trpc";
+import type { AiAnalysis, SpicedReport, MeddpiccReport, PitchCoaching, PreCallIntelligence, AnalysisItem } from "../../../drizzle/schema";
+import { toast } from "sonner";
+import { format } from "date-fns";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
-import { toast } from "sonner";
-import { Link, useParams } from "wouter";
-import { useState, useRef } from "react";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
-  Activity,
-  ArrowLeft,
-  BarChart3,
-  Bot,
-  CheckSquare,
-  Clock,
-  FileText,
-  Loader2,
-  Mic,
-  Play,
-  TrendingUp,
-  Upload,
-  Video,
-  Zap,
+  ArrowLeft, Zap, Loader2, Upload, FileText, Brain, Target, TrendingUp,
+  CheckSquare, MessageSquare, AlertCircle, ChevronDown, ChevronUp, Edit3, Save, X
 } from "lucide-react";
-import { format } from "date-fns";
-import { storagePut } from "@/lib/storage";
+import { Streamdown } from "streamdown";
 
-
-const PLATFORM_LABELS: Record<string, string> = {
-  zoom: "Zoom",
-  google_meet: "Google Meet",
-  teams: "Teams",
-  slack: "Slack",
-  webex: "Webex",
-  other: "Other",
+// ─── Types ────────────────────────────────────────────────────────────────────
+type ActionItem = {
+  id: number; title: string; description?: string | null;
+  status: "open" | "in_progress" | "completed" | "cancelled";
+  priority: "low" | "medium" | "high" | "urgent";
+  dueDate?: Date | null; isAiGenerated?: boolean | null;
 };
 
-const STATUS_LABELS: Record<string, string> = {
-  scheduled: "Scheduled",
-  joining: "Joining",
-  recording: "Recording",
-  processing: "Processing",
-  completed: "Completed",
-  failed: "Failed",
-};
-
+// ─── Main Component ───────────────────────────────────────────────────────────
 export default function MeetingDetail() {
   const params = useParams<{ id: string }>();
-  const meetingId = parseInt(params.id || "0");
+  const meetingId = parseInt(params.id ?? "0");
   const utils = trpc.useUtils();
 
-  const { data: meeting, isLoading } = trpc.meetings.get.useQuery({ id: meetingId });
-  const { data: transcript } = trpc.transcripts.get.useQuery({ meetingId });
-  const { data: analysis } = trpc.analysis.get.useQuery({ meetingId });
-  const { data: actionItems } = trpc.actionItems.list.useQuery({ meetingId });
-  const { data: spiced } = trpc.spiced.get.useQuery({ meetingId });
-  const { data: meddpicc } = trpc.meddpicc.get.useQuery({ meetingId });
-
-  const [manualTranscript, setManualTranscript] = useState("");
+  const [transcriptInput, setTranscriptInput] = useState("");
   const [isUploading, setIsUploading] = useState(false);
-  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [activeTab, setActiveTab] = useState("transcript");
 
-  const launchBotMutation = trpc.meetings.launchBot.useMutation({
-    onSuccess: () => {
-      toast.success("SalesLens bot is joining the meeting");
-      utils.meetings.get.invalidate({ id: meetingId });
-    },
-    onError: (err) => toast.error(err.message),
-  });
+  // ─── Queries ─────────────────────────────────────────────────────────────
+  const { data: meeting, isLoading: meetingLoading } = trpc.meetings.get.useQuery({ id: meetingId });
+  const { data: transcript } = trpc.transcripts.get.useQuery({ meetingId });
+  const { data: allData, isLoading: allDataLoading } = trpc.analyze.getAll.useQuery({ meetingId });
+  const { data: actionItems } = trpc.actionItems.list.useQuery({ meetingId });
 
+  // ─── Mutations ────────────────────────────────────────────────────────────
   const saveTranscriptMutation = trpc.transcripts.save.useMutation({
     onSuccess: () => {
       toast.success("Transcript saved");
@@ -76,79 +48,93 @@ export default function MeetingDetail() {
     onError: (err) => toast.error(err.message),
   });
 
-  const transcribeUrlMutation = trpc.transcripts.transcribeFromUrl.useMutation({
+  const generateAllMutation = trpc.analyze.full.useMutation({
     onSuccess: () => {
-      toast.success("Transcription complete");
-      utils.transcripts.get.invalidate({ meetingId });
-    },
-    onError: (err) => toast.error(err.message),
-  });
-
-  const generateAnalysisMutation = trpc.analysis.generate.useMutation({
-    onSuccess: () => {
-      toast.success("AI analysis complete");
-      utils.analysis.get.invalidate({ meetingId });
+      toast.success("All reports generated — SPICED, MEDDPICC, coaching, and prospects ready");
+      utils.analyze.getAll.invalidate({ meetingId });
       utils.actionItems.list.invalidate({ meetingId });
       utils.meetings.get.invalidate({ id: meetingId });
+      setActiveTab("analysis");
     },
     onError: (err) => toast.error(err.message),
   });
 
-  const generateSpicedMutation = trpc.spiced.generate.useMutation({
-    onSuccess: () => {
-      toast.success("SPICED report generated");
-      utils.spiced.get.invalidate({ meetingId });
-    },
-    onError: (err) => toast.error(err.message),
+  const updateActionMutation = trpc.actionItems.update.useMutation({
+    onSuccess: () => utils.actionItems.list.invalidate({ meetingId }),
   });
 
-  const generateMeddpiccMutation = trpc.meddpicc.generate.useMutation({
-    onSuccess: () => {
-      toast.success("MEDDPICC report generated");
-      utils.meddpicc.get.invalidate({ meetingId });
-    },
-    onError: (err) => toast.error(err.message),
+  const updateSpicedMutation = trpc.spiced.update.useMutation({
+    onSuccess: () => utils.analyze.getAll.invalidate({ meetingId }),
   });
 
+  const updateMeddpiccMutation = trpc.meddpicc.update.useMutation({
+    onSuccess: () => utils.analyze.getAll.invalidate({ meetingId }),
+  });
+
+  // ─── Handlers ─────────────────────────────────────────────────────────────
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    if (file.size > 16 * 1024 * 1024) {
-      toast.error("File must be under 16MB");
-      return;
-    }
+    if (file.size > 16 * 1024 * 1024) { toast.error("File must be under 16MB"); return; }
     setIsUploading(true);
     try {
-      const audioUrl = await storagePut(file);
-      await transcribeUrlMutation.mutateAsync({ meetingId, audioUrl });
-    } catch (err: unknown) {
-      toast.error((err as Error).message || "Upload failed");
+      const formData = new FormData();
+      formData.append("audio", file);
+      const res = await fetch("/api/transcribe-upload", { method: "POST", body: formData });
+      if (!res.ok) throw new Error("Upload failed");
+      const { text } = await res.json() as { text: string };
+      setTranscriptInput(text);
+      toast.success("Audio transcribed — review and save");
+    } catch {
+      toast.error("Transcription failed. Make sure the Whisper service is running.");
     } finally {
       setIsUploading(false);
     }
   };
 
-  if (isLoading) {
+  const handleSaveTranscript = () => {
+    if (!transcriptInput.trim()) { toast.error("Transcript is empty"); return; }
+    saveTranscriptMutation.mutate({
+      meetingId,
+      fullText: transcriptInput,
+    });
+  };
+
+  const handleGenerateAll = () => {
+    const text = transcript?.fullText || transcriptInput;
+    if (!text.trim()) { toast.error("Save a transcript first"); return; }
+    generateAllMutation.mutate({
+      meetingId,
+      transcript: text,
+      accountName: meeting?.accountName ?? undefined,
+      contactName: meeting?.contactName ?? undefined,
+    });
+  };
+
+  if (meetingLoading) {
     return (
       <div className="flex items-center justify-center h-64">
-        <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+        <Loader2 className="w-6 h-6 animate-spin text-primary" />
       </div>
     );
   }
 
   if (!meeting) {
     return (
-      <div className="p-6 text-center">
-        <p className="text-muted-foreground">Meeting not found</p>
-        <Link href="/meetings">
-          <Button variant="outline" size="sm" className="mt-3">Back to Meetings</Button>
-        </Link>
+      <div className="p-6">
+        <p className="text-muted-foreground">Meeting not found.</p>
+        <Link href="/meetings"><Button variant="outline" className="mt-4">Back to Meetings</Button></Link>
       </div>
     );
   }
 
-  const hasTranscript = !!transcript?.fullText;
-  const isProcessing = generateAnalysisMutation.isPending || generateSpicedMutation.isPending || generateMeddpiccMutation.isPending;
+  const hasTranscript = !!(transcript?.fullText || transcriptInput.trim());
+  const isProcessing = generateAllMutation.isPending;
+  const analysis = allData?.analysis as AiAnalysis | undefined;
+  const spiced = allData?.spiced as SpicedReport | undefined;
+  const meddpicc = allData?.meddpicc as MeddpiccReport | undefined;
+  const coaching = allData?.coaching as PitchCoaching | undefined;
+  const preCall = allData?.preCall as PreCallIntelligence | undefined;
 
   return (
     <div className="p-4 sm:p-6 space-y-4 sm:space-y-5">
@@ -162,780 +148,602 @@ export default function MeetingDetail() {
         </Link>
       </div>
 
-      <div className="flex items-start justify-between gap-3 flex-wrap">
-        <div>
-          <h1 className="text-lg sm:text-xl font-semibold text-foreground">{meeting.title}</h1>
-          <div className="flex items-center gap-3 mt-1.5 text-xs text-muted-foreground flex-wrap">
-            {meeting.accountName && <span>{meeting.accountName}</span>}
-            {meeting.contactName && <span>· {meeting.contactName}</span>}
-            {meeting.dealStage && (
-              <span className="px-2 py-0.5 rounded bg-muted text-muted-foreground">
-                {meeting.dealStage}
-              </span>
-            )}
-            <span className="flex items-center gap-1">
-              <Clock className="w-3 h-3" />
-              {format(new Date(meeting.createdAt), "MMM d, yyyy 'at' h:mm a")}
-            </span>
+      <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
+        <div className="min-w-0">
+          <h1 className="text-xl sm:text-2xl font-semibold text-foreground truncate">{meeting.title}</h1>
+          <div className="flex flex-wrap items-center gap-2 mt-1">
+              {meeting.accountName && <Badge variant="outline" className="text-xs">{meeting.accountName}</Badge>}
+              {meeting.contactName && <span className="text-xs text-muted-foreground">{meeting.contactName as string}</span>}
+              {meeting.dealStage && <Badge className="text-xs bg-primary/10 text-primary border-primary/20">{meeting.dealStage}</Badge>}
+              <span className="text-xs text-muted-foreground">{format(new Date(meeting.createdAt as Date), "MMM d, yyyy")}</span>
           </div>
         </div>
-        <div className="flex items-center gap-2 shrink-0">
-          <span className={`text-[10px] px-2 py-1 rounded-full font-medium platform-${meeting.platform}`}>
-            {PLATFORM_LABELS[meeting.platform]}
-          </span>
-          <span className={`text-[10px] px-2 py-1 rounded-full font-medium status-${meeting.status}`}>
-            {STATUS_LABELS[meeting.status]}
-          </span>
-        </div>
+        <Button
+          onClick={handleGenerateAll}
+          disabled={!hasTranscript || isProcessing}
+          className="gap-2 shrink-0 bg-primary hover:bg-primary/90"
+          size="sm"
+        >
+          {isProcessing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Zap className="w-4 h-4" />}
+          {isProcessing ? "Generating..." : "Generate All Reports"}
+        </Button>
       </div>
 
-      {/* Bot Launch Bar */}
-      {meeting.status === "scheduled" && (
-        <div className="flex items-center gap-3 p-4 rounded-lg border border-primary/20 bg-primary/5">
-          <Bot className="w-5 h-5 text-primary shrink-0" />
-          <div className="flex-1">
-            <p className="text-sm font-medium text-primary">Launch SalesLens Bot</p>
-            <p className="text-xs text-muted-foreground mt-0.5">
-              {meeting.meetingUrl
-                ? "Click to send the AI bot to join and record your meeting"
-                : "Add a meeting URL first to enable bot auto-join"}
-            </p>
-          </div>
-          <Button
-            size="sm"
-            disabled={!meeting.meetingUrl || launchBotMutation.isPending}
-            onClick={() => launchBotMutation.mutate({ meetingId, meetingUrl: meeting.meetingUrl! })}
-            className="gap-2 shrink-0"
-          >
-            {launchBotMutation.isPending ? (
-              <Loader2 className="w-3.5 h-3.5 animate-spin" />
-            ) : (
-              <Play className="w-3.5 h-3.5" />
-            )}
-            Launch Bot
-          </Button>
-        </div>
-      )}
-
-      {/* Main Tabs */}
-      <Tabs defaultValue="transcript" className="space-y-4">
-        <TabsList className="bg-card border border-border flex-wrap h-auto gap-0.5 p-1">
-          <TabsTrigger value="transcript" className="gap-1 text-xs px-2 py-1.5">
-            <FileText className="w-3.5 h-3.5" />
-            Transcript
+      {/* Tabs */}
+      <Tabs value={activeTab} onValueChange={setActiveTab}>
+        <TabsList className="flex flex-wrap h-auto gap-1 bg-muted/50 p-1">
+          <TabsTrigger value="transcript" className="text-xs sm:text-sm">
+            <FileText className="w-3 h-3 mr-1" />Transcript
           </TabsTrigger>
-          <TabsTrigger value="analysis" className="gap-1 text-xs px-2 py-1.5">
-            <Activity className="w-3.5 h-3.5" />
-            Analysis
-            {analysis && <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 ml-0.5" />}
+          <TabsTrigger value="analysis" className="text-xs sm:text-sm">
+            <Brain className="w-3 h-3 mr-1" />Analysis
           </TabsTrigger>
-          <TabsTrigger value="spiced" className="gap-1 text-xs px-2 py-1.5">
-            <TrendingUp className="w-3.5 h-3.5" />
-            SPICED
-            {spiced && <span className="w-1.5 h-1.5 rounded-full bg-blue-400 ml-0.5" />}
+          <TabsTrigger value="spiced" className="text-xs sm:text-sm">
+            <Target className="w-3 h-3 mr-1" />SPICED
           </TabsTrigger>
-          <TabsTrigger value="meddpicc" className="gap-1 text-xs px-2 py-1.5">
-            <BarChart3 className="w-3.5 h-3.5" />
-            MEDDPICC
-            {meddpicc && <span className="w-1.5 h-1.5 rounded-full bg-purple-400 ml-0.5" />}
+          <TabsTrigger value="meddpicc" className="text-xs sm:text-sm">
+            <TrendingUp className="w-3 h-3 mr-1" />MEDDPICC
           </TabsTrigger>
-          <TabsTrigger value="actions" className="gap-1 text-xs px-2 py-1.5">
-            <CheckSquare className="w-3.5 h-3.5" />
-            Actions
-            {actionItems && actionItems.length > 0 && (
-              <span className="ml-0.5 px-1 py-0 rounded bg-primary/20 text-primary text-[9px] font-medium">
-                {actionItems.length}
+          <TabsTrigger value="coaching" className="text-xs sm:text-sm">
+            <MessageSquare className="w-3 h-3 mr-1" />Coaching
+          </TabsTrigger>
+          <TabsTrigger value="actions" className="text-xs sm:text-sm">
+            <CheckSquare className="w-3 h-3 mr-1" />Actions
+            {actionItems && actionItems.filter((a: ActionItem) => a.status !== "completed").length > 0 && (
+              <span className="ml-1 text-[10px] bg-primary text-primary-foreground rounded-full px-1.5">
+                {actionItems.filter((a: ActionItem) => a.status !== "completed").length}
               </span>
             )}
           </TabsTrigger>
         </TabsList>
 
-        {/* Transcript Tab */}
-        <TabsContent value="transcript" className="space-y-4">
-          {!hasTranscript ? (
-            <Card className="bg-card border-border">
-              <CardContent className="p-6">
-                <div className="flex flex-col items-center gap-4 text-center">
-                  <div className="w-12 h-12 rounded-xl bg-primary/10 border border-primary/20 flex items-center justify-center">
-                    <Mic className="w-5 h-5 text-primary" />
+        {/* ── Transcript Tab ── */}
+        <TabsContent value="transcript" className="mt-4 space-y-4">
+          {/* Audio Upload */}
+          <Card className="bg-card border-border">
+            <CardHeader className="pb-3">
+              <CardTitle className="text-sm flex items-center gap-2">
+                <Upload className="w-4 h-4 text-primary" />
+                Upload Audio File
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <label className="flex flex-col items-center justify-center w-full h-24 border-2 border-dashed border-border rounded-lg cursor-pointer hover:border-primary/50 hover:bg-primary/5 transition-colors">
+                <input type="file" accept="audio/*,.mp3,.wav,.m4a,.webm,.ogg" className="hidden" onChange={handleFileUpload} disabled={isUploading} />
+                {isUploading ? (
+                  <div className="flex items-center gap-2 text-primary">
+                    <Loader2 className="w-5 h-5 animate-spin" />
+                    <span className="text-sm">Transcribing with Whisper...</span>
                   </div>
-                  <div>
-                    <p className="text-sm font-medium text-foreground">No transcript yet</p>
-                    <p className="text-xs text-muted-foreground mt-1">
-                      Upload an audio file or paste a transcript manually
-                    </p>
-                  </div>
-
-                  <div className="flex items-center gap-3 w-full max-w-sm">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="flex-1 gap-2"
-                      onClick={() => fileInputRef.current?.click()}
-                      disabled={isUploading || transcribeUrlMutation.isPending}
-                    >
-                      {isUploading || transcribeUrlMutation.isPending ? (
-                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                      ) : (
-                        <Upload className="w-3.5 h-3.5" />
-                      )}
-                      Upload Audio
-                    </Button>
-                    <input
-                      ref={fileInputRef}
-                      type="file"
-                      accept="audio/*,video/mp4"
-                      className="hidden"
-                      onChange={handleFileUpload}
-                    />
-                  </div>
-
-                  <div className="w-full max-w-lg space-y-2">
-                    <p className="text-xs text-muted-foreground">Or paste transcript manually:</p>
-                    <Textarea
-                      placeholder="Paste your meeting transcript here..."
-                      value={manualTranscript}
-                      onChange={(e) => setManualTranscript(e.target.value)}
-                      className="bg-input border-border min-h-32 text-xs font-mono"
-                    />
-                    <Button
-                      size="sm"
-                      disabled={!manualTranscript.trim() || saveTranscriptMutation.isPending}
-                      onClick={() => saveTranscriptMutation.mutate({ meetingId, fullText: manualTranscript })}
-                      className="gap-2"
-                    >
-                      {saveTranscriptMutation.isPending ? (
-                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                      ) : (
-                        <FileText className="w-3.5 h-3.5" />
-                      )}
-                      Save Transcript
-                    </Button>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          ) : (
-            <div className="space-y-3">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                  <FileText className="w-3.5 h-3.5" />
-                  <span>{transcript.wordCount?.toLocaleString()} words</span>
-                  {transcript.language && <span>· {transcript.language.toUpperCase()}</span>}
-                </div>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={() => fileInputRef.current?.click()}
-                  disabled={isUploading}
-                  className="gap-1.5 text-xs h-7"
-                >
-                  <Upload className="w-3 h-3" />
-                  Re-upload
-                </Button>
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  accept="audio/*,video/mp4"
-                  className="hidden"
-                  onChange={handleFileUpload}
-                />
-              </div>
-
-              {/* Segments */}
-              {transcript.segments && Array.isArray(transcript.segments) && transcript.segments.length > 0 ? (
-                <Card className="bg-card border-border">
-                  <CardContent className="p-4 space-y-1 max-h-96 overflow-y-auto">
-                    {(transcript.segments as Array<{ id: number; speaker: string; text: string; startTime?: number }>).map((seg, i) => (
-                      <div key={i} className="transcript-segment">
-                        <div className="flex items-start gap-3">
-                          <span className="text-[10px] font-mono text-primary/70 shrink-0 mt-0.5 w-16">
-                            {seg.startTime !== undefined
-                              ? `${Math.floor(seg.startTime / 60)}:${String(Math.floor(seg.startTime % 60)).padStart(2, "0")}`
-                              : `#${i + 1}`}
-                          </span>
-                          <div>
-                            <span className="text-[10px] font-semibold text-muted-foreground mr-2">
-                              {seg.speaker}
-                            </span>
-                            <span className="text-xs text-foreground">{seg.text}</span>
-                          </div>
-                        </div>
-                      </div>
-                    ))}
-                  </CardContent>
-                </Card>
-              ) : (
-                <Card className="bg-card border-border">
-                  <CardContent className="p-4 max-h-96 overflow-y-auto">
-                    <p className="text-xs text-foreground leading-relaxed font-mono whitespace-pre-wrap">
-                      {transcript.fullText}
-                    </p>
-                  </CardContent>
-                </Card>
-              )}
-            </div>
-          )}
-
-          {/* Generate All Button */}
-          {hasTranscript && (
-            <div className="flex items-center gap-3 p-4 rounded-lg border border-border bg-card">
-              <Zap className="w-4 h-4 text-yellow-400 shrink-0" />
-              <div className="flex-1">
-                <p className="text-sm font-medium text-foreground">Generate AI Intelligence</p>
-                <p className="text-xs text-muted-foreground mt-0.5">
-                  Run AI analysis, SPICED report, MEDDPICC report, and extract action items
-                </p>
-              </div>
-              <Button
-                size="sm"
-                disabled={isProcessing}
-                onClick={async () => {
-                  await generateAnalysisMutation.mutateAsync({ meetingId });
-                  await generateSpicedMutation.mutateAsync({ meetingId });
-                  await generateMeddpiccMutation.mutateAsync({ meetingId });
-                }}
-                className="gap-2 shrink-0"
-              >
-                {isProcessing ? (
-                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
                 ) : (
-                  <Zap className="w-3.5 h-3.5" />
+                  <div className="text-center">
+                    <Upload className="w-6 h-6 text-muted-foreground mx-auto mb-1" />
+                    <p className="text-sm text-muted-foreground">Drop audio file or click to upload</p>
+                    <p className="text-xs text-muted-foreground/60 mt-0.5">MP3, WAV, M4A, WebM — max 16MB</p>
+                  </div>
                 )}
-                {isProcessing ? "Analyzing..." : "Analyze All"}
-              </Button>
-            </div>
-          )}
+              </label>
+            </CardContent>
+          </Card>
+
+          {/* Transcript Text Input */}
+          <Card className="bg-card border-border">
+            <CardHeader className="pb-3">
+              <CardTitle className="text-sm flex items-center gap-2">
+                <FileText className="w-4 h-4 text-primary" />
+                Transcript Text
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              {transcript?.fullText && !transcriptInput && (
+                <div className="rounded-lg bg-muted/30 border border-border p-3 max-h-64 overflow-y-auto">
+                  <p className="text-xs text-muted-foreground whitespace-pre-wrap leading-relaxed">{transcript.fullText}</p>
+                </div>
+              )}
+              <Textarea
+                placeholder={transcript?.fullText ? "Edit transcript or paste a new one..." : "Paste your call transcript here...\n\nTip: Include speaker labels like:\n[Rep]: ...\n[Prospect]: ..."}
+                value={transcriptInput}
+                onChange={(e) => setTranscriptInput(e.target.value)}
+                className="min-h-[200px] text-xs font-mono bg-input border-border resize-y"
+              />
+              <div className="flex items-center justify-between gap-3">
+                <p className="text-xs text-muted-foreground">
+                  {transcriptInput.split(/\s+/).filter(Boolean).length} words
+                </p>
+                <div className="flex gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={handleSaveTranscript}
+                    disabled={!transcriptInput.trim() || saveTranscriptMutation.isPending}
+                    className="text-xs"
+                  >
+                    {saveTranscriptMutation.isPending ? <Loader2 className="w-3 h-3 animate-spin mr-1" /> : <Save className="w-3 h-3 mr-1" />}
+                    Save Transcript
+                  </Button>
+                  <Button
+                    size="sm"
+                    onClick={handleGenerateAll}
+                    disabled={!hasTranscript || isProcessing}
+                    className="text-xs gap-1 bg-primary hover:bg-primary/90"
+                  >
+                    {isProcessing ? <Loader2 className="w-3 h-3 animate-spin" /> : <Zap className="w-3 h-3" />}
+                    Generate All Reports
+                  </Button>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
         </TabsContent>
 
-        {/* Analysis Tab */}
-        <TabsContent value="analysis">
-          {!analysis ? (
-            <EmptyAnalysis
-              icon={<Activity className="w-5 h-5 text-primary" />}
-              title="No analysis yet"
-              description="Generate AI analysis from the transcript"
-              onGenerate={hasTranscript ? () => generateAnalysisMutation.mutate({ meetingId }) : undefined}
-              isGenerating={generateAnalysisMutation.isPending}
-              hasTranscript={hasTranscript}
-            />
-          ) : (
+        {/* ── Analysis Tab ── */}
+        <TabsContent value="analysis" className="mt-4">
+          {allDataLoading ? (
+            <div className="flex items-center justify-center h-32"><Loader2 className="w-5 h-5 animate-spin text-primary" /></div>
+          ) : analysis ? (
             <div className="space-y-4">
-              {/* Summary */}
-              <Card className="bg-card border-border">
-                <CardHeader className="pb-2">
-                  <CardTitle className="text-sm font-semibold flex items-center gap-2">
-                    <Activity className="w-4 h-4 text-primary" />
-                    Executive Summary
-                    <SentimentBadge sentiment={analysis.sentiment} />
-                    {analysis.dealScore !== null && analysis.dealScore !== undefined && (
-                      <span className="ml-auto text-xs font-mono text-muted-foreground">
-                        Deal Score: <span className="text-foreground font-semibold">{analysis.dealScore}/100</span>
-                      </span>
-                    )}
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <p className="text-sm text-foreground leading-relaxed">{analysis.summary}</p>
-                </CardContent>
-              </Card>
-
-              {/* Grid */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <AnalysisSection
-                  title="Pain Points"
-                  color="red"
-                  items={(analysis.painPoints as Array<{ text: string; confidence?: number }>) || []}
-                />
-                <AnalysisSection
-                  title="Objections"
-                  color="orange"
-                  items={(analysis.objections as Array<{ text: string; confidence?: number }>) || []}
-                />
-                <AnalysisSection
-                  title="Buying Signals"
-                  color="emerald"
-                  items={(analysis.buyingSignals as Array<{ text: string; confidence?: number }>) || []}
-                />
-                <AnalysisSection
-                  title="Next Steps"
-                  color="blue"
-                  items={(analysis.nextSteps as Array<{ text: string; confidence?: number }>) || []}
-                />
+              {/* Deal Score */}
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                <ScoreCard label="Deal Score" value={`${analysis.dealScore ?? 0}/100`} color="text-primary" />
+                <ScoreCard label="Sentiment" value={analysis.sentiment ?? "—"} color="text-emerald-400" />
+                <ScoreCard label="Talk Ratio" value={analysis.talkRatio?.rep != null ? `${Math.round((analysis.talkRatio.rep ?? 0) * 100)}% rep` : "—"} color="text-blue-400" />
+                <ScoreCard label="Company" value={meeting?.accountName ?? "Unknown"} color="text-amber-400" />
               </div>
 
-              {/* Key Quotes */}
-              {analysis.keyQuotes && (analysis.keyQuotes as Array<{ speaker: string; text: string; category: string }>).length > 0 && (
+              {/* Summary */}
+              {analysis.summary && (
                 <Card className="bg-card border-border">
-                  <CardHeader className="pb-2">
-                    <CardTitle className="text-sm font-semibold">Key Quotes</CardTitle>
-                  </CardHeader>
-                  <CardContent className="space-y-3">
-                    {(analysis.keyQuotes as Array<{ speaker: string; text: string; category: string }>).map((q, i) => (
-                      <div key={i} className="flex gap-3">
-                        <div className="w-0.5 rounded-full bg-primary/40 shrink-0" />
-                        <div>
-                          <p className="text-xs text-foreground italic">"{q.text}"</p>
-                          <p className="text-[10px] text-muted-foreground mt-1">
-                            — {q.speaker}
-                            {q.category && (
-                              <span className="ml-1.5 px-1.5 py-0 rounded bg-muted text-[9px]">
-                                {q.category.replace("_", " ")}
-                              </span>
-                            )}
-                          </p>
-                        </div>
-                      </div>
-                    ))}
+                  <CardHeader className="pb-2"><CardTitle className="text-sm">Call Summary</CardTitle></CardHeader>
+                  <CardContent><Streamdown className="text-sm text-muted-foreground leading-relaxed">{analysis.summary}</Streamdown></CardContent>
+                </Card>
+              )}
+
+              {/* Pain Points, Objections, Buying Signals */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <InsightCard title="Pain Points" items={(analysis.painPoints ?? []).map((p: AnalysisItem) => p.text)} color="text-red-400" />
+                <InsightCard title="Objections" items={(analysis.objections ?? []).map((o: AnalysisItem) => o.text)} color="text-amber-400" />
+                <InsightCard title="Buying Signals" items={(analysis.buyingSignals ?? []).map((b: AnalysisItem) => b.text)} color="text-emerald-400" />
+              </div>
+
+              {/* Next Steps */}
+              {(analysis.nextSteps ?? []).length > 0 && (
+                <Card className="bg-card border-border">
+                  <CardHeader className="pb-2"><CardTitle className="text-sm">Recommended Next Steps</CardTitle></CardHeader>
+                  <CardContent>
+                    <ul className="space-y-1.5">
+                      {(analysis.nextSteps ?? []).map((step: AnalysisItem, i: number) => (
+                        <li key={i} className="flex items-start gap-2 text-sm">
+                          <span className="text-primary font-bold mt-0.5">{i + 1}.</span>
+                          <span className="text-muted-foreground">{step.text}</span>
+                        </li>
+                      ))}
+                    </ul>
                   </CardContent>
                 </Card>
               )}
 
-              <div className="flex justify-end">
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={() => generateAnalysisMutation.mutate({ meetingId })}
-                  disabled={generateAnalysisMutation.isPending}
-                  className="gap-2 text-xs"
-                >
-                  {generateAnalysisMutation.isPending ? <Loader2 className="w-3 h-3 animate-spin" /> : <Zap className="w-3 h-3" />}
-                  Regenerate
-                </Button>
-              </div>
+              {/* Pre-Call Intelligence */}
+              {preCall && (
+                <PreCallCard preCall={preCall} />
+              )}
             </div>
+          ) : (
+            <EmptyState
+              icon={<Brain className="w-8 h-8 text-muted-foreground/40" />}
+              title="No analysis yet"
+              description="Save a transcript and click Generate All Reports to get AI-powered insights."
+              action={hasTranscript ? (
+                <Button size="sm" onClick={handleGenerateAll} disabled={isProcessing} className="gap-2">
+                  {isProcessing ? <Loader2 className="w-3 h-3 animate-spin" /> : <Zap className="w-3 h-3" />}
+                  Generate Now
+                </Button>
+              ) : undefined}
+            />
           )}
         </TabsContent>
 
-        {/* SPICED Tab */}
-        <TabsContent value="spiced">
-          <SpicedTab
-            meetingId={meetingId}
-            spiced={spiced}
-            hasTranscript={hasTranscript}
-            isGenerating={generateSpicedMutation.isPending}
-            onGenerate={() => generateSpicedMutation.mutate({ meetingId })}
-          />
+        {/* ── SPICED Tab ── */}
+        <TabsContent value="spiced" className="mt-4">
+          {spiced ? (
+            <SpicedTab spiced={spiced} meetingId={meetingId} updateMutation={updateSpicedMutation} isGenerating={isProcessing} onGenerate={handleGenerateAll} />
+          ) : (
+            <EmptyState
+              icon={<Target className="w-8 h-8 text-muted-foreground/40" />}
+              title="No SPICED report yet"
+              description="Generate all reports to auto-fill the SPICED methodology framework."
+              action={hasTranscript ? (
+                <Button size="sm" onClick={handleGenerateAll} disabled={isProcessing} className="gap-2">
+                  {isProcessing ? <Loader2 className="w-3 h-3 animate-spin" /> : <Zap className="w-3 h-3" />}
+                  Generate SPICED
+                </Button>
+              ) : undefined}
+            />
+          )}
         </TabsContent>
 
-        {/* MEDDPICC Tab */}
-        <TabsContent value="meddpicc">
-          <MeddpiccTab
-            meetingId={meetingId}
-            meddpicc={meddpicc}
-            hasTranscript={hasTranscript}
-            isGenerating={generateMeddpiccMutation.isPending}
-            onGenerate={() => generateMeddpiccMutation.mutate({ meetingId })}
-          />
+        {/* ── MEDDPICC Tab ── */}
+        <TabsContent value="meddpicc" className="mt-4">
+          {meddpicc ? (
+            <MeddpiccTab meddpicc={meddpicc} meetingId={meetingId} updateMutation={updateMeddpiccMutation} isGenerating={isProcessing} onGenerate={handleGenerateAll} />
+          ) : (
+            <EmptyState
+              icon={<TrendingUp className="w-8 h-8 text-muted-foreground/40" />}
+              title="No MEDDPICC report yet"
+              description="Generate all reports to auto-fill the MEDDPICC qualification framework."
+              action={hasTranscript ? (
+                <Button size="sm" onClick={handleGenerateAll} disabled={isProcessing} className="gap-2">
+                  {isProcessing ? <Loader2 className="w-3 h-3 animate-spin" /> : <Zap className="w-3 h-3" />}
+                  Generate MEDDPICC
+                </Button>
+              ) : undefined}
+            />
+          )}
         </TabsContent>
 
-        {/* Actions Tab */}
-        <TabsContent value="actions">
-          <ActionItemsTab meetingId={meetingId} items={actionItems || []} />
+        {/* ── Coaching Tab ── */}
+        <TabsContent value="coaching" className="mt-4">
+          {coaching ? (
+            <CoachingTab coaching={coaching} />
+          ) : (
+            <EmptyState
+              icon={<MessageSquare className="w-8 h-8 text-muted-foreground/40" />}
+              title="No coaching feedback yet"
+              description="Generate all reports to get PhD-level pitch coaching and moment-by-moment feedback."
+              action={hasTranscript ? (
+                <Button size="sm" onClick={handleGenerateAll} disabled={isProcessing} className="gap-2">
+                  {isProcessing ? <Loader2 className="w-3 h-3 animate-spin" /> : <Zap className="w-3 h-3" />}
+                  Generate Coaching
+                </Button>
+              ) : undefined}
+            />
+          )}
+        </TabsContent>
+
+        {/* ── Action Items Tab ── */}
+        <TabsContent value="actions" className="mt-4">
+          <ActionItemsTab meetingId={meetingId} items={actionItems ?? []} updateMutation={updateActionMutation} />
         </TabsContent>
       </Tabs>
     </div>
   );
 }
 
-// ─── Sub-components ───────────────────────────────────────────────────────────
-
-function EmptyAnalysis({
-  icon, title, description, onGenerate, isGenerating, hasTranscript,
-}: {
-  icon: React.ReactNode;
-  title: string;
-  description: string;
-  onGenerate?: () => void;
-  isGenerating?: boolean;
-  hasTranscript: boolean;
-}) {
+// ─── PreCallCard ─────────────────────────────────────────────────────────────
+function PreCallCard({ preCall }: { preCall: PreCallIntelligence }) {
+  const companyName = preCall.companyName ?? null;
+  const industry = preCall.industry ?? null;
+  const fundingStage = preCall.fundingStage ?? null;
+  const leadWithProduct = preCall.leadWithProduct ?? null;
+  const bullets = preCall.prepBullets ?? [];
   return (
-    <Card className="bg-card border-border">
-      <CardContent className="flex flex-col items-center gap-3 py-12 text-center">
-        <div className="w-12 h-12 rounded-xl bg-primary/10 border border-primary/20 flex items-center justify-center">
-          {icon}
-        </div>
-        <p className="text-sm font-medium text-foreground">{title}</p>
-        <p className="text-xs text-muted-foreground">{description}</p>
-        {!hasTranscript && (
-          <p className="text-xs text-yellow-400">Add a transcript first</p>
-        )}
-        {onGenerate && (
-          <Button size="sm" onClick={onGenerate} disabled={isGenerating} className="gap-2 mt-2">
-            {isGenerating ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Zap className="w-3.5 h-3.5" />}
-            {isGenerating ? "Generating..." : "Generate Now"}
-          </Button>
-        )}
-      </CardContent>
-    </Card>
-  );
-}
-
-function AnalysisSection({
-  title, color, items,
-}: {
-  title: string;
-  color: string;
-  items: Array<{ text: string; confidence?: number }>;
-}) {
-  const colorMap: Record<string, string> = {
-    red: "text-red-400 bg-red-500/10 border-red-500/20",
-    orange: "text-orange-400 bg-orange-500/10 border-orange-500/20",
-    emerald: "text-emerald-400 bg-emerald-500/10 border-emerald-500/20",
-    blue: "text-blue-400 bg-blue-500/10 border-blue-500/20",
-  };
-  return (
-    <Card className="bg-card border-border">
+    <Card className="bg-card border-border border-blue-500/20">
       <CardHeader className="pb-2">
-        <CardTitle className={`text-xs font-semibold ${colorMap[color]?.split(" ")[0]}`}>{title}</CardTitle>
+        <CardTitle className="text-sm flex items-center gap-2">
+          <Brain className="w-4 h-4 text-blue-400" />
+          Pre-Call Intelligence
+        </CardTitle>
       </CardHeader>
       <CardContent className="space-y-2">
-        {items.length === 0 && (
-          <p className="text-xs text-muted-foreground">None identified</p>
+        {companyName && (
+          <p className="text-xs font-medium text-blue-400">
+            {companyName}{industry ? ` · ${industry}` : ''}{fundingStage ? ` · ${fundingStage}` : ''}
+          </p>
         )}
-        {items.map((item, i) => (
-          <div key={i} className={`p-2.5 rounded-md border text-xs ${colorMap[color]}`}>
-            {item.text}
+        {bullets.length > 0 && (
+          <div>
+            <p className="text-xs font-medium text-blue-400 mb-1">Pre-Call Prep</p>
+            <ul className="space-y-1">
+              {bullets.map((b, i) => (
+                <li key={i} className="text-xs text-muted-foreground">
+                  <span className="text-foreground font-medium">• {b.point}</span>
+                  {b.why && <span className="text-muted-foreground/70"> — {b.why}</span>}
+                </li>
+              ))}
+            </ul>
           </div>
-        ))}
+        )}
+        {leadWithProduct && (
+          <p className="text-xs"><span className="text-blue-400 font-medium">Lead with: </span>{leadWithProduct}</p>
+        )}
       </CardContent>
     </Card>
   );
 }
 
-function SentimentBadge({ sentiment }: { sentiment: string | null | undefined }) {
-  if (!sentiment) return null;
-  const map: Record<string, string> = {
-    positive: "text-emerald-400 bg-emerald-500/10 border-emerald-500/20",
-    neutral: "text-zinc-400 bg-zinc-500/10 border-zinc-500/20",
-    negative: "text-red-400 bg-red-500/10 border-red-500/20",
-    mixed: "text-yellow-400 bg-yellow-500/10 border-yellow-500/20",
-  };
+// ─── Sub-components ───────────────────────────────────────────────────────────
+
+function ScoreCard({ label, value, color }: { label: string; value: string; color: string }) {
   return (
-    <span className={`text-[10px] px-2 py-0.5 rounded-full border font-medium capitalize ${map[sentiment] || ""}`}>
-      {sentiment}
-    </span>
+    <Card className="bg-card border-border">
+      <CardContent className="p-3">
+        <p className="text-xs text-muted-foreground">{label}</p>
+        <p className={`text-lg font-bold mt-0.5 ${color}`}>{value}</p>
+      </CardContent>
+    </Card>
   );
 }
 
-function ConfidenceBar({ value }: { value: number | null | undefined }) {
-  if (value === null || value === undefined) return null;
-  const pct = Math.round(value * 100);
-  const color = pct >= 75 ? "bg-emerald-500" : pct >= 50 ? "bg-yellow-500" : "bg-red-500";
+function InsightCard({ title, items, color }: { title: string; items: string[]; color: string }) {
   return (
-    <div className="flex items-center gap-2">
-      <div className="confidence-bar flex-1">
-        <div className={`confidence-fill ${color}`} style={{ width: `${pct}%` }} />
-      </div>
-      <span className="text-[10px] text-muted-foreground w-8 text-right">{pct}%</span>
+    <Card className="bg-card border-border">
+      <CardHeader className="pb-2"><CardTitle className={`text-xs ${color}`}>{title}</CardTitle></CardHeader>
+      <CardContent>
+        {items.length === 0 ? (
+          <p className="text-xs text-muted-foreground/50">None identified</p>
+        ) : (
+          <ul className="space-y-1">
+            {items.map((item, i) => (
+              <li key={i} className="text-xs text-muted-foreground flex items-start gap-1.5">
+                <span className={`${color} mt-0.5`}>•</span>{item}
+              </li>
+            ))}
+          </ul>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+function EmptyState({ icon, title, description, action }: { icon: React.ReactNode; title: string; description: string; action?: React.ReactNode }) {
+  return (
+    <div className="flex flex-col items-center justify-center py-16 text-center gap-3">
+      {icon}
+      <p className="text-sm font-medium text-foreground">{title}</p>
+      <p className="text-xs text-muted-foreground max-w-xs">{description}</p>
+      {action}
     </div>
   );
 }
 
-function SpicedTab({
-  meetingId, spiced, hasTranscript, isGenerating, onGenerate,
-}: {
-  meetingId: number;
-  spiced: Record<string, unknown> | null | undefined;
-  hasTranscript: boolean;
-  isGenerating: boolean;
-  onGenerate: () => void;
+// ─── SPICED Tab ───────────────────────────────────────────────────────────────
+const SPICED_FIELDS = [
+  { key: "situation", label: "Situation", description: "Current state of the prospect's business and hiring process", color: "text-blue-400" },
+  { key: "pain", label: "Pain", description: "Core problem or challenge driving the need for a solution", color: "text-red-400" },
+  { key: "impact", label: "Impact", description: "Business impact of not solving the problem (cost, time, risk)", color: "text-amber-400" },
+  { key: "criticalEvent", label: "Critical Event", description: "Time-bound event creating urgency to act now", color: "text-purple-400" },
+  { key: "decision", label: "Decision", description: "Decision-making process, stakeholders, and timeline", color: "text-emerald-400" },
+];
+
+function SpicedTab({ spiced, meetingId, updateMutation, isGenerating, onGenerate }: {
+  spiced: Record<string, unknown>; meetingId: number;
+  updateMutation: ReturnType<typeof trpc.spiced.update.useMutation>;
+  isGenerating: boolean; onGenerate: () => void;
 }) {
-  const utils = trpc.useUtils();
-  const updateMutation = trpc.spiced.update.useMutation({
-    onSuccess: () => {
-      toast.success("SPICED report updated");
-      utils.spiced.get.invalidate({ meetingId });
-    },
-  });
-
-  const fields = [
-    { key: "situation", label: "Situation", description: "Current state of the prospect's business, systems, processes, and context", color: "blue" },
-    { key: "pain", label: "Pain", description: "Specific problems, frustrations, and root causes of their challenges", color: "red" },
-    { key: "impact", label: "Impact", description: "Quantified business impact — financial cost, productivity loss, missed opportunities", color: "orange" },
-    { key: "criticalEvent", label: "Critical Event", description: "Hard deadline or triggering event that creates urgency for a decision", color: "yellow" },
-    { key: "decision", label: "Decision", description: "Decision-making process, stakeholders involved, evaluation criteria, timeline", color: "purple" },
-  ];
-
-  if (!spiced) {
-    return (
-      <EmptyAnalysis
-        icon={<TrendingUp className="w-5 h-5 text-primary" />}
-        title="No SPICED report yet"
-        description="Generate a SPICED methodology report from the transcript"
-        onGenerate={hasTranscript ? onGenerate : undefined}
-        isGenerating={isGenerating}
-        hasTranscript={hasTranscript}
-      />
-    );
-  }
-
   return (
-    <div className="space-y-4">
+    <div className="space-y-3">
       <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <TrendingUp className="w-4 h-4 text-primary" />
-          <span className="text-sm font-semibold text-foreground">SPICED Report</span>
-          {spiced.overallCompleteness !== null && spiced.overallCompleteness !== undefined && (
-            <span className="text-xs text-muted-foreground">
-              {Math.round((spiced.overallCompleteness as number) * 100)}% complete
-            </span>
-          )}
-        </div>
-        <Button size="sm" variant="outline" onClick={onGenerate} disabled={isGenerating} className="gap-1.5 text-xs h-7">
+        <p className="text-xs text-muted-foreground">Auto-filled from transcript. Click any field to edit.</p>
+        <Button variant="outline" size="sm" onClick={onGenerate} disabled={isGenerating} className="text-xs gap-1">
           {isGenerating ? <Loader2 className="w-3 h-3 animate-spin" /> : <Zap className="w-3 h-3" />}
           Regenerate
         </Button>
       </div>
-
-      <div className="space-y-3">
-        {fields.map((field) => (
-          <SpicedField
-            key={field.key}
-            fieldKey={field.key}
-            label={field.label}
-            description={field.description}
-            value={spiced[field.key] as string | null}
-            confidence={spiced[`${field.key}Confidence`] as number | null}
-            isAiGenerated={spiced[`${field.key}AiGenerated`] as boolean}
-            color={field.color}
-            onSave={(val) => updateMutation.mutate({ meetingId, [field.key]: val })}
-          />
-        ))}
-      </div>
+      {SPICED_FIELDS.map((field) => (
+        <MethodologyField
+          key={field.key}
+          fieldKey={field.key}
+          label={field.label}
+          description={field.description}
+          value={spiced[field.key] as string | null}
+          confidence={spiced[`${field.key}Confidence`] as number | null}
+          isAiGenerated={spiced[`${field.key}AiGenerated`] as boolean}
+          color={field.color}
+          onSave={(val) => updateMutation.mutate({ meetingId, data: { [field.key]: val } })}
+        />
+      ))}
     </div>
   );
 }
 
-function SpicedField({
-  fieldKey, label, description, value, confidence, isAiGenerated, color, onSave,
-}: {
-  fieldKey: string;
-  label: string;
-  description: string;
-  value: string | null;
-  confidence: number | null;
-  isAiGenerated: boolean;
-  color: string;
-  onSave: (val: string) => void;
+// ─── MEDDPICC Tab ─────────────────────────────────────────────────────────────
+const MEDDPICC_FIELDS = [
+  { key: "metrics", label: "Metrics", description: "Quantifiable success metrics the prospect cares about", color: "text-blue-400" },
+  { key: "economicBuyer", label: "Economic Buyer", description: "Person with budget authority and final sign-off", color: "text-emerald-400" },
+  { key: "decisionCriteria", label: "Decision Criteria", description: "Technical and business criteria for vendor selection", color: "text-amber-400" },
+  { key: "decisionProcess", label: "Decision Process", description: "Steps, stakeholders, and timeline for the buying decision", color: "text-purple-400" },
+  { key: "paperProcess", label: "Paper Process", description: "Legal, procurement, and contract approval process", color: "text-pink-400" },
+  { key: "identifyPain", label: "Identify Pain", description: "Confirmed business pain with quantified impact", color: "text-red-400" },
+  { key: "champion", label: "Champion", description: "Internal advocate who will sell on your behalf", color: "text-cyan-400" },
+  { key: "competition", label: "Competition", description: "Competing vendors, internal solutions, or status quo", color: "text-orange-400" },
+];
+
+function MeddpiccTab({ meddpicc, meetingId, updateMutation, isGenerating, onGenerate }: {
+  meddpicc: Record<string, unknown>; meetingId: number;
+  updateMutation: ReturnType<typeof trpc.meddpicc.update.useMutation>;
+  isGenerating: boolean; onGenerate: () => void;
+}) {
+  return (
+    <div className="space-y-3">
+      <div className="flex items-center justify-between">
+        <p className="text-xs text-muted-foreground">Auto-filled from transcript. Click any field to edit.</p>
+        <Button variant="outline" size="sm" onClick={onGenerate} disabled={isGenerating} className="text-xs gap-1">
+          {isGenerating ? <Loader2 className="w-3 h-3 animate-spin" /> : <Zap className="w-3 h-3" />}
+          Regenerate
+        </Button>
+      </div>
+      {MEDDPICC_FIELDS.map((field) => (
+        <MethodologyField
+          key={field.key}
+          fieldKey={field.key}
+          label={field.label}
+          description={field.description}
+          value={meddpicc[field.key] as string | null}
+          confidence={meddpicc[`${field.key}Confidence`] as number | null}
+          isAiGenerated={meddpicc[`${field.key}AiGenerated`] as boolean}
+          color={field.color}
+          onSave={(val) => updateMutation.mutate({ meetingId, data: { [field.key]: val } })}
+        />
+      ))}
+    </div>
+  );
+}
+
+// ─── Methodology Field ────────────────────────────────────────────────────────
+function MethodologyField({ fieldKey, label, description, value, confidence, isAiGenerated, color, onSave }: {
+  fieldKey: string; label: string; description: string;
+  value: string | null; confidence: number | null; isAiGenerated: boolean;
+  color: string; onSave: (val: string) => void;
 }) {
   const [editing, setEditing] = useState(false);
-  const [draft, setDraft] = useState(value || "");
+  const [draft, setDraft] = useState(value ?? "");
+  const [expanded, setExpanded] = useState(false);
 
-  const colorMap: Record<string, string> = {
-    blue: "text-blue-400 bg-blue-500/10 border-blue-500/30",
-    red: "text-red-400 bg-red-500/10 border-red-500/30",
-    orange: "text-orange-400 bg-orange-500/10 border-orange-500/30",
-    yellow: "text-yellow-400 bg-yellow-500/10 border-yellow-500/30",
-    purple: "text-purple-400 bg-purple-500/10 border-purple-500/30",
+  const handleSave = () => {
+    onSave(draft);
+    setEditing(false);
   };
 
   return (
     <Card className="bg-card border-border">
       <CardContent className="p-4">
-        <div className="flex items-start justify-between gap-3 mb-2">
-          <div>
-            <div className="flex items-center gap-2">
-              <span className={`text-xs font-bold uppercase tracking-wider ${colorMap[color]?.split(" ")[0]}`}>
-                {label}
-              </span>
-              {isAiGenerated && (
-                <span className="text-[9px] px-1.5 py-0 rounded bg-primary/10 text-primary border border-primary/20">
-                  AI
-                </span>
+        <div className="flex items-start justify-between gap-3">
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2 mb-1">
+              <span className={`text-xs font-bold uppercase tracking-wider ${color}`}>{label}</span>
+              {isAiGenerated && <span className="text-[9px] px-1.5 py-0 rounded bg-primary/10 text-primary border border-primary/20">AI</span>}
+              {confidence !== null && (
+                <span className="text-[9px] text-muted-foreground/60">{Math.round(confidence * 100)}% confidence</span>
               )}
             </div>
-            <p className="text-[10px] text-muted-foreground mt-0.5">{description}</p>
+            <p className="text-[10px] text-muted-foreground/60 mb-2">{description}</p>
+            {editing ? (
+              <div className="space-y-2">
+                <Textarea
+                  value={draft}
+                  onChange={(e) => setDraft(e.target.value)}
+                  className="text-sm min-h-[80px] bg-input border-border"
+                  autoFocus
+                />
+                <div className="flex gap-2">
+                  <Button size="sm" onClick={handleSave} className="text-xs h-7"><Save className="w-3 h-3 mr-1" />Save</Button>
+                  <Button size="sm" variant="ghost" onClick={() => { setEditing(false); setDraft(value ?? ""); }} className="text-xs h-7"><X className="w-3 h-3 mr-1" />Cancel</Button>
+                </div>
+              </div>
+            ) : (
+              <div>
+                {value ? (
+                  <div>
+                    <p className={`text-sm text-foreground ${!expanded && value.length > 200 ? "line-clamp-3" : ""}`}>{value}</p>
+                    {value.length > 200 && (
+                      <button onClick={() => setExpanded(!expanded)} className="text-xs text-primary mt-1 flex items-center gap-0.5">
+                        {expanded ? <><ChevronUp className="w-3 h-3" />Show less</> : <><ChevronDown className="w-3 h-3" />Show more</>}
+                      </button>
+                    )}
+                  </div>
+                ) : (
+                  <p className="text-sm text-muted-foreground/40 italic">Not identified — click to add manually</p>
+                )}
+              </div>
+            )}
           </div>
-          <Button
-            variant="ghost"
-            size="sm"
-            className="h-6 text-[10px] text-muted-foreground hover:text-foreground shrink-0"
-            onClick={() => { setEditing(!editing); setDraft(value || ""); }}
-          >
-            {editing ? "Cancel" : "Edit"}
-          </Button>
+          {!editing && (
+            <Button variant="ghost" size="sm" onClick={() => { setEditing(true); setDraft(value ?? ""); }} className="h-7 w-7 p-0 shrink-0">
+              <Edit3 className="w-3 h-3" />
+            </Button>
+          )}
         </div>
-
-        {confidence !== null && confidence !== undefined && (
-          <div className="mb-2">
-            <ConfidenceBar value={confidence} />
-          </div>
-        )}
-
-        {editing ? (
-          <div className="space-y-2">
-            <Textarea
-              value={draft}
-              onChange={(e) => setDraft(e.target.value)}
-              className="bg-input border-border text-xs min-h-20"
-              placeholder={`Describe the ${label.toLowerCase()}...`}
-            />
-            <div className="flex gap-2">
-              <Button size="sm" className="h-7 text-xs" onClick={() => { onSave(draft); setEditing(false); }}>
-                Save
-              </Button>
-              <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => setEditing(false)}>
-                Cancel
-              </Button>
-            </div>
-          </div>
-        ) : (
-          <p className={`text-sm leading-relaxed ${value ? "text-foreground" : "text-muted-foreground italic"}`}>
-            {value || `No ${label.toLowerCase()} data captured yet`}
-          </p>
-        )}
       </CardContent>
     </Card>
   );
 }
 
-function MeddpiccTab({
-  meetingId, meddpicc, hasTranscript, isGenerating, onGenerate,
-}: {
+// ─── Coaching Tab ─────────────────────────────────────────────────────────────
+function CoachingTab({ coaching }: { coaching: PitchCoaching }) {
+  return (
+    <div className="space-y-4">
+      {/* Scores */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        <ScoreCard label="Overall Score" value={`${coaching.overallScore ?? 0}/100`} color="text-primary" />
+        <ScoreCard label="Discovery" value={`${coaching.discoveryScore ?? 0}/100`} color="text-blue-400" />
+        <ScoreCard label="Objection Handling" value={`${coaching.objectionScore ?? 0}/100`} color="text-amber-400" />
+        <ScoreCard label="MEDDPICC Coverage" value={`${Math.round((coaching.meddpiccCoverage ?? 0) * 100)}%`} color="text-emerald-400" />
+      </div>
+
+      {/* Strengths */}
+      {(coaching.strengths as string[] ?? []).length > 0 && (
+        <Card className="bg-card border-border border-emerald-500/20">
+          <CardHeader className="pb-2"><CardTitle className="text-sm text-emerald-400">What You Did Well</CardTitle></CardHeader>
+          <CardContent>
+            <ul className="space-y-1.5">
+              {(coaching.strengths as string[]).map((s, i) => (
+                <li key={i} className="text-sm text-muted-foreground flex items-start gap-2">
+                  <span className="text-emerald-400 mt-0.5">✓</span>{s}
+                </li>
+              ))}
+            </ul>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Improvements */}
+      {(coaching.improvements as string[] ?? []).length > 0 && (
+        <Card className="bg-card border-border border-amber-500/20">
+          <CardHeader className="pb-2"><CardTitle className="text-sm text-amber-400">Areas to Improve</CardTitle></CardHeader>
+          <CardContent>
+            <ul className="space-y-1.5">
+              {(coaching.improvements as string[]).map((s, i) => (
+                <li key={i} className="text-sm text-muted-foreground flex items-start gap-2">
+                  <span className="text-amber-400 mt-0.5">→</span>{s}
+                </li>
+              ))}
+            </ul>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Moment-by-moment coaching */}
+      {(coaching.moments ?? []).length > 0 && (
+        <Card className="bg-card border-border">
+          <CardHeader className="pb-2"><CardTitle className="text-sm">Moment-by-Moment Coaching</CardTitle></CardHeader>
+          <CardContent className="space-y-4">
+            {(coaching.moments ?? []).map((m, i) => (
+              <div key={i} className="space-y-2 pb-4 border-b border-border last:border-0 last:pb-0">
+                <div className="rounded bg-muted/30 border-l-2 border-red-400 px-3 py-2">
+                  <p className="text-xs text-muted-foreground/60 mb-0.5">What was said:</p>
+                  <p className="text-xs text-foreground italic">"{m.whatWasSaid}"</p>
+                </div>
+                <div className="rounded bg-emerald-500/5 border-l-2 border-emerald-400 px-3 py-2">
+                  <p className="text-xs text-muted-foreground/60 mb-0.5">Better alternative:</p>
+                  <p className="text-xs text-foreground">"{m.whatShouldHaveBeenSaid}"</p>
+                </div>
+                {m.why && (
+                  <p className="text-xs text-muted-foreground/70 pl-3">
+                    <span className="text-primary font-medium">Why: </span>{m.why}
+                  </p>
+                )}
+              </div>
+            ))}
+          </CardContent>
+        </Card>
+      )}
+    </div>
+  );
+}
+
+// ─── Action Items Tab ─────────────────────────────────────────────────────────
+function ActionItemsTab({ meetingId, items, updateMutation }: {
   meetingId: number;
-  meddpicc: Record<string, unknown> | null | undefined;
-  hasTranscript: boolean;
-  isGenerating: boolean;
-  onGenerate: () => void;
+  items: ActionItem[];
+  updateMutation: ReturnType<typeof trpc.actionItems.update.useMutation>;
 }) {
-  const utils = trpc.useUtils();
-  const updateMutation = trpc.meddpicc.update.useMutation({
-    onSuccess: () => {
-      toast.success("MEDDPICC report updated");
-      utils.meddpicc.get.invalidate({ meetingId });
-    },
-  });
-
-  const fields = [
-    { key: "metrics", label: "Metrics", description: "Quantifiable KPIs, ROI, cost savings, productivity gains the prospect cares about", color: "blue" },
-    { key: "economicBuyer", label: "Economic Buyer", description: "Person with final budget authority — name, title, priorities, concerns", color: "purple" },
-    { key: "decisionCriteria", label: "Decision Criteria", description: "Technical, financial, operational standards used to evaluate solutions", color: "indigo" },
-    { key: "decisionProcess", label: "Decision Process", description: "Steps, timeline, approval chain, stakeholders involved in the purchase", color: "cyan" },
-    { key: "paperProcess", label: "Paper Process", description: "Legal, procurement, security reviews, contract requirements, expected timeline", color: "teal" },
-    { key: "identifyPain", label: "Identify Pain", description: "Root cause business pain — operational, financial, or strategic challenges", color: "red" },
-    { key: "champion", label: "Champion", description: "Internal advocate who will sell for you — name, motivation, influence level", color: "emerald" },
-    { key: "competition", label: "Competition", description: "Known competitors being evaluated, incumbent solutions, competitive positioning", color: "orange" },
-  ];
-
-  if (!meddpicc) {
+  if (items.length === 0) {
     return (
-      <EmptyAnalysis
-        icon={<BarChart3 className="w-5 h-5 text-primary" />}
-        title="No MEDDPICC report yet"
-        description="Generate a MEDDPICC methodology report from the transcript"
-        onGenerate={hasTranscript ? onGenerate : undefined}
-        isGenerating={isGenerating}
-        hasTranscript={hasTranscript}
+      <EmptyState
+        icon={<CheckSquare className="w-8 h-8 text-muted-foreground/40" />}
+        title="No action items yet"
+        description="Generate AI analysis to auto-extract action items from the transcript."
       />
     );
   }
 
   return (
-    <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <BarChart3 className="w-4 h-4 text-primary" />
-          <span className="text-sm font-semibold text-foreground">MEDDPICC Report</span>
-          {meddpicc.overallCompleteness !== null && meddpicc.overallCompleteness !== undefined && (
-            <span className="text-xs text-muted-foreground">
-              {Math.round((meddpicc.overallCompleteness as number) * 100)}% complete
-            </span>
-          )}
-        </div>
-        <Button size="sm" variant="outline" onClick={onGenerate} disabled={isGenerating} className="gap-1.5 text-xs h-7">
-          {isGenerating ? <Loader2 className="w-3 h-3 animate-spin" /> : <Zap className="w-3 h-3" />}
-          Regenerate
-        </Button>
-      </div>
-
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-        {fields.map((field) => (
-          <SpicedField
-            key={field.key}
-            fieldKey={field.key}
-            label={field.label}
-            description={field.description}
-            value={meddpicc[field.key] as string | null}
-            confidence={meddpicc[`${field.key}Confidence`] as number | null}
-            isAiGenerated={meddpicc[`${field.key}AiGenerated`] as boolean}
-            color={field.color}
-            onSave={(val) => updateMutation.mutate({ meetingId, [field.key]: val })}
-          />
-        ))}
-      </div>
-    </div>
-  );
-}
-
-function ActionItemsTab({
-  meetingId, items,
-}: {
-  meetingId: number;
-  items: Array<{
-    id: number;
-    title: string;
-    description?: string | null;
-    status: string;
-    priority: string;
-    dueDate?: Date | null;
-    isAiGenerated?: boolean | null;
-  }>;
-}) {
-  const utils = trpc.useUtils();
-  const updateMutation = trpc.actionItems.update.useMutation({
-    onSuccess: () => utils.actionItems.list.invalidate({ meetingId }),
-  });
-  const createMutation = trpc.actionItems.create.useMutation({
-    onSuccess: () => utils.actionItems.list.invalidate({ meetingId }),
-  });
-
-  const [newTitle, setNewTitle] = useState("");
-
-  const handleAddItem = () => {
-    if (!newTitle.trim()) return;
-    createMutation.mutate({ meetingId, title: newTitle });
-    setNewTitle("");
-  };
-
-  return (
-    <div className="space-y-3">
-      {/* Add new */}
-      <div className="flex gap-2">
-        <input
-          type="text"
-          placeholder="Add action item..."
-          value={newTitle}
-          onChange={(e) => setNewTitle(e.target.value)}
-          onKeyDown={(e) => e.key === "Enter" && handleAddItem()}
-          className="flex-1 bg-input border border-border rounded-md px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
-        />
-        <Button size="sm" onClick={handleAddItem} disabled={!newTitle.trim() || createMutation.isPending}>
-          Add
-        </Button>
-      </div>
-
-      {items.length === 0 && (
-        <div className="text-center py-8 text-muted-foreground text-sm">
-          No action items yet. Generate AI analysis to auto-extract them.
-        </div>
-      )}
-
+    <div className="space-y-2">
+      <p className="text-xs text-muted-foreground">{items.filter(a => a.status !== "completed").length} open · {items.filter(a => a.status === "completed").length} completed</p>
       {items.map((item) => (
         <div key={item.id} className="flex items-start gap-3 p-3 rounded-lg border border-border bg-card hover:border-border/80 transition-colors">
           <button
-            onClick={() =>
-              updateMutation.mutate({
-                id: item.id,
-                status: item.status === "completed" ? "open" : "completed",
-              })
-            }
-            className={`w-4 h-4 rounded border mt-0.5 shrink-0 flex items-center justify-center transition-colors ${
-              item.status === "completed"
-                ? "bg-emerald-500 border-emerald-500"
-                : "border-border hover:border-primary"
-            }`}
+            onClick={() => updateMutation.mutate({ id: item.id, data: { status: item.status === "completed" ? "open" : "completed" } })}
+            className={`w-4 h-4 rounded border mt-0.5 shrink-0 flex items-center justify-center transition-colors ${item.status === "completed" ? "bg-emerald-500 border-emerald-500" : "border-border hover:border-primary"}`}
           >
             {item.status === "completed" && (
               <svg className="w-2.5 h-2.5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -944,29 +752,26 @@ function ActionItemsTab({
             )}
           </button>
           <div className="flex-1 min-w-0">
-            <p className={`text-sm font-medium ${item.status === "completed" ? "line-through text-muted-foreground" : "text-foreground"}`}>
-              {item.title}
-            </p>
-            {item.description && (
-              <p className="text-xs text-muted-foreground mt-0.5">{item.description}</p>
-            )}
+            <p className={`text-sm font-medium ${item.status === "completed" ? "line-through text-muted-foreground" : "text-foreground"}`}>{item.title}</p>
+            {item.description && <p className="text-xs text-muted-foreground mt-0.5">{item.description}</p>}
             <div className="flex items-center gap-2 mt-1.5">
-              <span className={`text-[10px] px-1.5 py-0 rounded-full border font-medium priority-${item.priority}`}>
-                {item.priority}
-              </span>
+              <span className={`text-[10px] px-1.5 py-0 rounded-full border font-medium ${
+                item.priority === "urgent" ? "border-red-500/30 text-red-400" :
+                item.priority === "high" ? "border-amber-500/30 text-amber-400" :
+                item.priority === "medium" ? "border-blue-500/30 text-blue-400" :
+                "border-border text-muted-foreground"
+              }`}>{item.priority}</span>
               {item.dueDate && (
                 <span className={`text-[10px] ${new Date(item.dueDate) < new Date() && item.status !== "completed" ? "text-red-400" : "text-muted-foreground"}`}>
                   Due {format(new Date(item.dueDate), "MMM d")}
                 </span>
               )}
-              {item.isAiGenerated && (
-                <span className="text-[9px] px-1.5 py-0 rounded bg-primary/10 text-primary border border-primary/20">AI</span>
-              )}
+              {item.isAiGenerated && <span className="text-[9px] px-1.5 py-0 rounded bg-primary/10 text-primary border border-primary/20">AI</span>}
             </div>
           </div>
           <select
             value={item.status}
-            onChange={(e) => updateMutation.mutate({ id: item.id, status: e.target.value as "open" | "in_progress" | "completed" | "cancelled" })}
+            onChange={(e) => updateMutation.mutate({ id: item.id, data: { status: e.target.value as ActionItem["status"] } })}
             className="text-[10px] bg-input border border-border rounded px-1.5 py-1 text-foreground focus:outline-none shrink-0"
           >
             <option value="open">Open</option>
@@ -979,5 +784,3 @@ function ActionItemsTab({
     </div>
   );
 }
-
-

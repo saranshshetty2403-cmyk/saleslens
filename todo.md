@@ -1,94 +1,80 @@
-# SalesLens — AI Sales Call Intelligence Tool
+# SalesLens — HackerEarth AI Sales Intelligence Platform
+# Complete Feature Tracker
 
-## Database & Schema
-- [x] meetings table (id, title, platform, meetingUrl, recallBotId, status, scheduledAt, startedAt, endedAt, duration, participants, createdAt, updatedAt)
-- [x] transcripts table (id, meetingId, fullText, segments JSON, speakerMap JSON, language, wordCount, createdAt)
-- [x] ai_analyses table (id, meetingId, summary, painPoints JSON, objections JSON, buyingSignals JSON, nextSteps JSON, dealScore, sentiment, createdAt)
-- [x] spiced_reports table (id, meetingId, situation, pain, impact, criticalEvent, decision, aiGenerated boolean, lastEditedAt, createdAt)
-- [x] meddpicc_reports table (id, meetingId, metrics, economicBuyer, decisionCriteria, decisionProcess, paperProcess, identifyPain, champion, competition, aiGenerated boolean, lastEditedAt, createdAt)
-- [x] action_items table (id, meetingId, title, description, dueDate, status, priority, assignee, createdAt, updatedAt)
-- [x] notes table (id, meetingId, content, isAiGenerated, templateType, createdAt, updatedAt)
-- [x] app_settings table (id, ollamaEndpoint, ollamaModel, whisperEndpoint, botName, createdAt, updatedAt)
+## Phase 1: Backend — All Routers & AI Prompts
+- [ ] Unified analyze endpoint: transcript in → SPICED, MEDDPICC, summary, action items, pitch coaching, pre-call intel, prospects all generated in one call
+- [ ] SPICED router: generate + save + update (editable fields)
+- [ ] MEDDPICC router: generate + save + update (editable fields)
+- [ ] AI Analysis router: summary, pain points, objections, buying signals, deal score, talk ratio
+- [ ] Pitch Coaching router: moment-by-moment feedback, scores, rewrites — HackerEarth-specific
+- [ ] Pre-Call Intelligence router: company identification, trigger events, prep bullets, suggested opening
+- [ ] Prospects router: CRUD + AI generation from transcript (competitors, buyer personas)
+- [ ] Email Generator router: follow-up, cold outreach, objection response — custom style prompt baked in
+- [ ] Deck Generator router: extract promises + client asks from transcript, generate slide outline, produce PPTX
+- [ ] Battlecards router: static HackerEarth vs HackerRank/Codility/TestGorilla/CodeSignal data
+- [ ] Objection Library router: HackerEarth-specific objections with proven responses
+- [ ] Action Items router: CRUD + AI extraction from transcript
+- [ ] Settings router: Ollama/Whisper endpoint config + health check
+- [ ] HackerEarth knowledge base embedded in all AI system prompts
 
-## Backend Routers
-- [x] meetings router: create, list, get, update, delete, updateStatus, stats, search
-- [x] transcripts router: get by meetingId, save manual transcript, transcribe from audio URL (via local Whisper)
-- [x] analysis router: generateAnalysis (AI summary, pain points, objections, buying signals, deal score) via Ollama
-- [x] spiced router: generate (Ollama LLM structured JSON), get, update (manual edits)
-- [x] meddpicc router: generate (Ollama LLM structured JSON), get, update (manual edits)
-- [x] actionItems router: create, list, update, delete, updateStatus, extractFromTranscript (Ollama)
-- [x] notes router: create, get, update (structured template notes)
-- [x] settings router: get, update, healthCheck (Ollama + Whisper live status)
-- [x] recall router: privacy-first stubs (no external bot — manual recording workflow)
+## Phase 2: Test Data — 5 Realistic HackerEarth Sales Scenarios
+- [ ] Scenario 1: Discovery call — Razorpay (fintech, 500 engineers, hiring at scale, using HackerRank)
+- [ ] Scenario 2: Demo call — Swiggy (food-tech, Series H, needs AI screening for 200 roles/month)
+- [ ] Scenario 3: Objection handling — Freshworks (SaaS, budget objection, competitor comparison)
+- [ ] Scenario 4: Negotiation/closing — Meesho (e-commerce, procurement process, paper process)
+- [ ] Scenario 5: Lost deal analysis — BYJU's (edtech, went with Codility, post-mortem analysis)
+- [ ] Full transcripts (1000+ words each) with realistic speaker labels
+- [ ] Pre-seeded SPICED, MEDDPICC, analysis, pitch coaching, action items for each scenario
+- [ ] Pre-seeded prospects generated from each scenario
+- [ ] Pre-seeded emails for each scenario
+- [ ] Pre-seeded deck outlines for each scenario
 
-## Frontend Pages
-- [x] App.tsx: dark theme, sidebar layout, all routes
-- [x] SalesLayout: custom dark sidebar with nav icons, active states, privacy badge
-- [x] Dashboard/Home page: stats cards, recent meetings, quick actions, deal score chart
-- [x] Meetings list page: searchable, filterable by platform/status
-- [x] New Meeting page: form to create meeting with platform/URL fields
-- [x] Meeting Detail page: transcript viewer, speaker segments, timestamps
-- [x] AI Analysis tab: summary, pain points, objections, buying signals, next steps, key quotes
-- [x] SPICED Report tab: editable fields with AI pre-fill, confidence indicators, regenerate
-- [x] MEDDPICC Report tab: editable fields with AI pre-fill, confidence indicators, regenerate
-- [x] Action Items page: list with due dates, status, priority, filters, inline status update
-- [x] Deal Timeline page: visual timeline of meetings per deal/account
-- [x] Notes page: structured editable note templates
-- [x] Settings page: Ollama/Whisper endpoint config, live health checks, quick setup guide
-- [x] Analysis page: all meeting analyses aggregated view
-- [x] SpicedReports page: all SPICED reports list view
-- [x] MeddpiccReports page: all MEDDPICC reports list view
+## Phase 3: Frontend — All Pages
+- [ ] Analyze page (HERO): transcript paste + audio upload, one-click generate all, progress indicator
+- [ ] Analyze results page: tabbed view of all generated reports for a meeting
+- [ ] SPICED report page: editable fields, confidence indicators, completeness score, export
+- [ ] MEDDPICC report page: editable fields, confidence indicators, completeness score, export
+- [ ] Pitch Coach page: overall score, moment cards with what-was-said vs what-should-have-been-said, strengths/improvements
+- [ ] Pre-Call Intelligence page: company card, trigger events, prep bullets, suggested opening
+- [ ] Prospect Queue page: kanban-style cards, status pipeline, outreach angle, suggested product
+- [ ] Email Generator page: email type selector, context input, generated email with copy/edit
+- [ ] Deck Generator page: extract promises/asks, slide outline editor, PPTX download
+- [ ] Battlecards page: HE vs competitors, feature comparison tables, objection responses
+- [ ] Objection Library page: searchable objections with proven responses and context
+- [ ] Action Items page: full CRUD, due dates, status, priority, filter by meeting
+- [ ] Meeting History page: searchable list, transcript viewer, all reports linked
+- [ ] Deal Timeline page: visual progression of deals across meetings
+- [ ] Settings page: Ollama/Whisper config, health checks, model selector
+- [ ] Dashboard: command center with stats, deal health, recent activity, quick actions
 
-## UI/UX
-- [x] Dark theme CSS variables (slate/zinc palette with blue/indigo accents)
-- [x] Sidebar navigation with icons and active states
-- [x] Platform badges (Zoom, Meet, Teams, Slack, Webex) with color coding
-- [x] Status badges for meetings (scheduled, recording, processing, complete, failed)
-- [x] Transcript search with keyword highlighting
-- [x] AI confidence indicators on methodology fields
-- [x] Editable inline fields for SPICED/MEDDPICC with save/discard
-- [x] Action item status tracking (open, in-progress, done)
-- [x] Deal score visualization
-- [x] Responsive layout
+## Phase 4: Dashboard Rebuild
+- [ ] Hero stats: meetings analyzed, deals in pipeline, avg deal score, action items due
+- [ ] Recent activity feed: last 5 analyses with deal scores
+- [ ] Deal health chart: score trend over time (recharts)
+- [ ] Quick actions: Analyze New Transcript, Generate Email, Add Prospect
+- [ ] Top objections summary widget
+- [ ] Competitor mentions tracker widget
 
-## Local AI Stack — Privacy First (Zero External Data)
-- [x] faster-whisper Python microservice (whisper_service.py, port 8001, Apple Silicon optimized)
-- [x] Dual input mode: audio file upload (MP3/WAV/M4A/WebM) OR raw transcript paste
-- [x] Audio stored only in local DB/S3 — never sent to external APIs
-- [x] All cloud LLM calls replaced with Ollama (localhost:11434, llama3.1:8b)
-- [x] SPICED report generator via Ollama structured JSON output
-- [x] MEDDPICC report generator via Ollama structured JSON output
-- [x] AI analysis (summary, pain points, objections, buying signals) via Ollama
-- [x] Action items extractor via Ollama
-- [x] Settings page: configurable Ollama endpoint + Whisper endpoint
-- [x] Settings page: live health check for Ollama + Whisper service status
-- [x] Graceful UI fallback when local AI services are offline
-- [x] Data privacy badge in sidebar showing 'All data stays local'
-- [x] SETUP.md: Ollama install, llama3.1:8b pull, faster-whisper setup, IndiaAI GPU config
-- [x] whisper_service.py updated to support audio_url (download from S3) in addition to multipart/audio_path
+## Phase 5: QA & Visual Polish
+- [ ] Test Analyze flow end-to-end with each of 5 test scenarios
+- [ ] Test SPICED/MEDDPICC edit and save
+- [ ] Test Pitch Coach moment cards render correctly
+- [ ] Test Email Generator with all 6 email types
+- [ ] Test Deck Generator PPTX download
+- [ ] Test Prospect Queue status pipeline updates
+- [ ] Test Battlecards all 4 competitors
+- [ ] Test Objection Library search
+- [ ] Test Action Items CRUD
+- [ ] Test mobile layout on all pages
+- [ ] Fix all visual inconsistencies
+- [ ] Verify dark theme consistency across all pages
+- [ ] Verify all loading states and error states
 
-## Tests
-- [x] auth router tests (single-user no-auth mode)
-- [x] localAI module tests: Ollama health check, Whisper health check, JSON parsing with fallbacks
-- [x] meetings router tests (list, stats, search)
-- [x] actionItems router tests
-- [x] settings router tests
-- [x] SPICED/MEDDPICC field name validation tests
-- [x] 18/18 tests passing
-
-## Mobile Responsiveness
-- [x] SalesLayout: hamburger menu button on mobile, slide-in drawer sidebar with overlay
-- [x] SalesLayout: hide sidebar by default on mobile (md breakpoint), show on md+
-- [x] Dashboard: responsive stat cards grid (2-col on mobile, 4-col on desktop)
-- [x] Dashboard: stack Recent Meetings + Quick Actions vertically on mobile
-- [x] Meetings: responsive list/card layout on mobile
-- [x] NewMeeting: full-width form fields on mobile (single-column grids)
-- [x] MeetingDetail: wrapping tabs and responsive padding on mobile
-- [x] SPICED Reports: responsive padding and header on mobile
-- [x] MEDDPICC Reports: responsive padding and header on mobile
-- [x] ActionItems: responsive padding and grids on mobile
-- [x] DealTimeline: responsive padding on mobile
-- [x] Notes: responsive padding on mobile
-- [x] Settings: responsive padding and stacked sections on mobile
-- [x] Global: mobile safe-area utilities (pb-safe), text-size-adjust
-- [x] index.html: viewport-fit=cover, Apple mobile web app meta tags, theme-color
+## Phase 6: Tests & Delivery
+- [ ] Vitest: analyze router unit tests
+- [ ] Vitest: SPICED/MEDDPICC generation tests
+- [ ] Vitest: email generation tests
+- [ ] Vitest: deck generation tests
+- [ ] Vitest: prospect CRUD tests
+- [ ] Update SETUP.md with complete local AI setup guide
+- [ ] Save checkpoint

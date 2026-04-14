@@ -63,7 +63,8 @@ export async function createMeeting(data: InsertMeeting) {
   const db = await getDb();
   if (!db) throw new Error("DB not available");
   const result = await db.insert(meetings).values(data);
-  return result[0];
+  const header = result[0] as { insertId?: number };
+  return { id: header.insertId ?? 0 };
 }
 
 export async function getMeetings(limit = 50, offset = 0) {
@@ -288,4 +289,111 @@ export async function upsertAppSettings(data: { ollamaEndpoint?: string; ollamaM
       await db.update(appSettings).set(updateData).where(eq(appSettings.id, existing[0]!.id));
     }
   }
+}
+
+// ─── Pitch Coaching ───────────────────────────────────────────────────────────
+import {
+  pitchCoaching,
+  preCallIntelligence,
+  prospects,
+  generatedEmails,
+  type InsertPitchCoaching,
+  type InsertPreCallIntelligence,
+  type InsertProspect,
+  type InsertGeneratedEmail,
+} from "../drizzle/schema";
+
+export async function upsertPitchCoaching(data: InsertPitchCoaching) {
+  const db = await getDb();
+  if (!db) throw new Error("DB not available");
+  const existing = await db.select().from(pitchCoaching).where(eq(pitchCoaching.meetingId, data.meetingId)).limit(1);
+  if (existing.length > 0) {
+    await db.update(pitchCoaching).set(data).where(eq(pitchCoaching.meetingId, data.meetingId));
+    return existing[0].id;
+  }
+  const result = await db.insert(pitchCoaching).values(data);
+  return result[0].insertId;
+}
+
+export async function getPitchCoachingByMeetingId(meetingId: number) {
+  const db = await getDb();
+  if (!db) return undefined;
+  const result = await db.select().from(pitchCoaching).where(eq(pitchCoaching.meetingId, meetingId)).limit(1);
+  return result[0];
+}
+
+// ─── Pre-Call Intelligence ────────────────────────────────────────────────────
+export async function upsertPreCallIntelligence(data: InsertPreCallIntelligence) {
+  const db = await getDb();
+  if (!db) throw new Error("DB not available");
+  const existing = await db.select().from(preCallIntelligence).where(eq(preCallIntelligence.meetingId, data.meetingId)).limit(1);
+  if (existing.length > 0) {
+    await db.update(preCallIntelligence).set(data).where(eq(preCallIntelligence.meetingId, data.meetingId));
+    return existing[0].id;
+  }
+  const result = await db.insert(preCallIntelligence).values(data);
+  return result[0].insertId;
+}
+
+export async function getPreCallIntelligenceByMeetingId(meetingId: number) {
+  const db = await getDb();
+  if (!db) return undefined;
+  const result = await db.select().from(preCallIntelligence).where(eq(preCallIntelligence.meetingId, meetingId)).limit(1);
+  return result[0];
+}
+
+// ─── Prospects ────────────────────────────────────────────────────────────────
+export async function createProspect(data: InsertProspect) {
+  const db = await getDb();
+  if (!db) throw new Error("DB not available");
+  const result = await db.insert(prospects).values(data);
+  return result[0].insertId;
+}
+
+export async function getProspects(limit = 50, offset = 0) {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(prospects).orderBy(desc(prospects.createdAt)).limit(limit).offset(offset);
+}
+
+export async function getProspectById(id: number) {
+  const db = await getDb();
+  if (!db) return undefined;
+  const result = await db.select().from(prospects).where(eq(prospects.id, id)).limit(1);
+  return result[0];
+}
+
+export async function updateProspect(id: number, data: Partial<InsertProspect>) {
+  const db = await getDb();
+  if (!db) throw new Error("DB not available");
+  await db.update(prospects).set(data).where(eq(prospects.id, id));
+}
+
+export async function deleteProspect(id: number) {
+  const db = await getDb();
+  if (!db) throw new Error("DB not available");
+  await db.delete(prospects).where(eq(prospects.id, id));
+}
+
+// ─── Generated Emails ─────────────────────────────────────────────────────────
+export async function createGeneratedEmail(data: InsertGeneratedEmail) {
+  const db = await getDb();
+  if (!db) throw new Error("DB not available");
+  const result = await db.insert(generatedEmails).values(data);
+  return result[0].insertId;
+}
+
+export async function getGeneratedEmails(meetingId?: number) {
+  const db = await getDb();
+  if (!db) return [];
+  if (meetingId !== undefined) {
+    return db.select().from(generatedEmails).where(eq(generatedEmails.meetingId, meetingId)).orderBy(desc(generatedEmails.createdAt));
+  }
+  return db.select().from(generatedEmails).orderBy(desc(generatedEmails.createdAt)).limit(50);
+}
+
+export async function deleteGeneratedEmail(id: number) {
+  const db = await getDb();
+  if (!db) throw new Error("DB not available");
+  await db.delete(generatedEmails).where(eq(generatedEmails.id, id));
 }

@@ -64,9 +64,6 @@ export default function NewMeeting() {
       accountName: form.accountName || undefined,
       contactName: form.contactName || undefined,
       dealStage: form.dealStage || undefined,
-      participants: form.participants
-        ? form.participants.split(",").map((p) => p.trim()).filter(Boolean)
-        : undefined,
     });
   };
 
