@@ -38,9 +38,9 @@ export default function DealTimeline() {
   const accounts = Object.entries(byAccount).sort(([a], [b]) => a.localeCompare(b));
 
   return (
-    <div className="p-6 space-y-5">
+    <div className="p-4 sm:p-6 space-y-5">
       <div>
-        <h1 className="text-2xl font-semibold text-foreground">Deal Timeline</h1>
+        <h1 className="text-xl sm:text-2xl font-semibold text-foreground">Deal Timeline</h1>
         <p className="text-sm text-muted-foreground mt-0.5">
           Track deal progression across accounts and meetings
         </p>

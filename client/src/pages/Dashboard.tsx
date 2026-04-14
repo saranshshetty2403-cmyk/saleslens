@@ -46,25 +46,26 @@ export default function Dashboard() {
   );
 
   return (
-    <div className="p-6 space-y-6">
+    <div className="p-4 sm:p-6 space-y-4 sm:space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-semibold text-foreground">Dashboard</h1>
+          <h1 className="text-xl sm:text-2xl font-semibold text-foreground">Dashboard</h1>
           <p className="text-sm text-muted-foreground mt-0.5">
             Your sales intelligence overview
           </p>
         </div>
         <Link href="/meetings/new">
-          <Button size="sm" className="gap-2">
+          <Button size="sm" className="gap-2 shrink-0">
             <Plus className="w-4 h-4" />
-            New Meeting
+            <span className="hidden sm:inline">New Meeting</span>
+            <span className="sm:hidden">New</span>
           </Button>
         </Link>
       </div>
 
       {/* Stats Grid */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
         <StatCard
           icon={<Video className="w-4 h-4 text-blue-400" />}
           label="Total Meetings"
@@ -93,7 +94,7 @@ export default function Dashboard() {
       </div>
 
       {/* Two column layout */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-6">
         {/* Recent Meetings */}
         <div className="lg:col-span-2">
           <Card className="bg-card border-border">
@@ -137,7 +138,7 @@ export default function Dashboard() {
                         {formatDistanceToNow(new Date(meeting.createdAt), { addSuffix: true })}
                       </p>
                     </div>
-                    <div className="flex items-center gap-2 shrink-0">
+                    <div className="hidden sm:flex items-center gap-2 shrink-0">
                       <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium platform-${meeting.platform}`}>
                         {PLATFORM_LABELS[meeting.platform]}
                       </span>
@@ -258,7 +259,7 @@ function StatCard({
 }) {
   return (
     <Card className="bg-card border-border">
-      <CardContent className="p-4">
+      <CardContent className="p-3 sm:p-4">
         <div className="flex items-center justify-between mb-2">
           <div className={`w-8 h-8 rounded-lg bg-${color}-500/10 border border-${color}-500/20 flex items-center justify-center`}>
             {icon}
@@ -269,7 +270,7 @@ function StatCard({
             </span>
           )}
         </div>
-        <p className="text-2xl font-bold text-foreground">{value}</p>
+        <p className="text-xl sm:text-2xl font-bold text-foreground">{value}</p>
         <p className="text-xs text-muted-foreground mt-0.5">{label}</p>
       </CardContent>
     </Card>

@@ -8,9 +8,9 @@ export default function Notes() {
   const { data: meetings } = trpc.meetings.list.useQuery({ limit: 100, offset: 0 });
 
   return (
-    <div className="p-6 space-y-5">
+    <div className="p-4 sm:p-6 space-y-5">
       <div>
-        <h1 className="text-2xl font-semibold text-foreground">Notes</h1>
+        <h1 className="text-xl sm:text-2xl font-semibold text-foreground">Notes</h1>
         <p className="text-sm text-muted-foreground mt-0.5">Structured notes from all your sales meetings</p>
       </div>
 

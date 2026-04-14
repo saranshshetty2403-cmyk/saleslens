@@ -35,9 +35,9 @@ export default function MeddpiccReports() {
   const { data: meetings } = trpc.meetings.list.useQuery({ limit: 100, offset: 0 });
 
   return (
-    <div className="p-6 space-y-5">
+    <div className="p-4 sm:p-6 space-y-5">
       <div>
-        <h1 className="text-2xl font-semibold text-foreground">MEDDPICC Reports</h1>
+        <h1 className="text-xl sm:text-2xl font-semibold text-foreground">MEDDPICC Reports</h1>
         <p className="text-sm text-muted-foreground mt-0.5">
           Metrics · Economic Buyer · Decision Criteria · Decision Process · Paper Process · Identify Pain · Champion · Competition
         </p>
@@ -72,7 +72,7 @@ function MeddpiccCard({ meeting }: { meeting: { id: number; title: string; accou
     <Link href={`/meetings/${meeting.id}?tab=meddpicc`}>
       <Card className="bg-card border-border hover:border-primary/30 hover:bg-accent/10 transition-all cursor-pointer">
         <CardHeader className="pb-3">
-          <div className="flex items-center justify-between">
+          <div className="flex items-center justify-between gap-3">
             <CardTitle className="text-sm font-semibold text-foreground flex items-center gap-2">
               <BarChart3 className="w-3.5 h-3.5 text-primary" />
               {meeting.title}

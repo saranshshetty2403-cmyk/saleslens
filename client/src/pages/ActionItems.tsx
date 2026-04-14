@@ -49,9 +49,9 @@ export default function ActionItems() {
   const done = filtered.filter((i) => i.status === "completed" || i.status === "cancelled");
 
   return (
-    <div className="p-6 space-y-5">
+    <div className="p-4 sm:p-6 space-y-5">
       <div>
-        <h1 className="text-2xl font-semibold text-foreground">Action Items</h1>
+        <h1 className="text-xl sm:text-2xl font-semibold text-foreground">Action Items</h1>
         <p className="text-sm text-muted-foreground mt-0.5">
           {(items || []).filter((i) => i.status === "open" || i.status === "in_progress").length} open · {(items || []).filter((i) => i.status === "completed").length} completed
         </p>

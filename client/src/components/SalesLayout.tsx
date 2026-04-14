@@ -8,13 +8,15 @@ import {
   ChevronRight,
   GitBranch,
   LayoutDashboard,
+  Menu,
   Mic,
   Plus,
   Settings,
   TrendingUp,
   Video,
+  X,
 } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Link, useLocation } from "wouter";
 
 const navItems = [
@@ -50,91 +52,111 @@ type SalesLayoutProps = {
 
 export default function SalesLayout({ children }: SalesLayoutProps) {
   const [collapsed, setCollapsed] = useState(false);
+  const [mobileOpen, setMobileOpen] = useState(false);
   const [location] = useLocation();
 
-  return (
-    <div className="flex h-screen overflow-hidden bg-background">
-      {/* Sidebar */}
-      <aside
-        className={cn(
-          "flex flex-col border-r border-border bg-sidebar transition-all duration-300 shrink-0",
-          collapsed ? "w-16" : "w-60"
-        )}
-      >
-        {/* Logo */}
-        <div className="flex items-center gap-3 px-4 py-5 border-b border-sidebar-border">
-          <div className="flex items-center justify-center w-8 h-8 rounded-lg bg-primary/20 border border-primary/30 shrink-0">
-            <Mic className="w-4 h-4 text-primary" />
-          </div>
-          {!collapsed && (
-            <div className="min-w-0">
-              <p className="text-sm font-semibold text-sidebar-foreground truncate">SalesLens</p>
-              <p className="text-xs text-muted-foreground truncate">AI Sales Intelligence</p>
-            </div>
-          )}
+  // Close mobile drawer on route change
+  useEffect(() => {
+    setMobileOpen(false);
+  }, [location]);
+
+  // Close mobile drawer on resize to desktop
+  useEffect(() => {
+    const handleResize = () => {
+      if (window.innerWidth >= 768) setMobileOpen(false);
+    };
+    window.addEventListener("resize", handleResize);
+    return () => window.removeEventListener("resize", handleResize);
+  }, []);
+
+  const SidebarContent = ({ isMobile = false }: { isMobile?: boolean }) => (
+    <>
+      {/* Logo */}
+      <div className="flex items-center gap-3 px-4 py-5 border-b border-sidebar-border">
+        <div className="flex items-center justify-center w-8 h-8 rounded-lg bg-primary/20 border border-primary/30 shrink-0">
+          <Mic className="w-4 h-4 text-primary" />
         </div>
+        {(!collapsed || isMobile) && (
+          <div className="min-w-0 flex-1">
+            <p className="text-sm font-semibold text-sidebar-foreground truncate">SalesLens</p>
+            <p className="text-xs text-muted-foreground truncate">AI Sales Intelligence</p>
+          </div>
+        )}
+        {isMobile && (
+          <button
+            onClick={() => setMobileOpen(false)}
+            className="p-1 rounded-md text-muted-foreground hover:text-foreground hover:bg-sidebar-accent transition-colors"
+            aria-label="Close menu"
+          >
+            <X className="w-5 h-5" />
+          </button>
+        )}
+      </div>
 
-        {/* Nav */}
-        <nav className="flex-1 overflow-y-auto py-4 px-2 space-y-5">
-          {navItems.map((group) => (
-            <div key={group.group}>
-              {!collapsed && (
-                <p className="px-2 mb-1.5 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/60">
-                  {group.group}
-                </p>
-              )}
-              <ul className="space-y-0.5">
-                {group.items.map((item) => {
-                  const isActive = location === item.path;
-                  return (
-                    <li key={item.path}>
-                      <Link href={item.path}>
-                        <span
+      {/* Nav */}
+      <nav className="flex-1 overflow-y-auto py-4 px-2 space-y-5">
+        {navItems.map((group) => (
+          <div key={group.group}>
+            {(!collapsed || isMobile) && (
+              <p className="px-2 mb-1.5 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/60">
+                {group.group}
+              </p>
+            )}
+            <ul className="space-y-0.5">
+              {group.items.map((item) => {
+                const isActive = location === item.path;
+                return (
+                  <li key={item.path}>
+                    <Link href={item.path}>
+                      <span
+                        className={cn(
+                          "flex items-center gap-3 px-2 py-2.5 rounded-md text-sm font-medium transition-all cursor-pointer",
+                          isActive
+                            ? "bg-primary/15 text-primary border border-primary/20"
+                            : "text-sidebar-foreground/70 hover:text-sidebar-foreground hover:bg-sidebar-accent",
+                          collapsed && !isMobile && "justify-center px-2"
+                        )}
+                        title={collapsed && !isMobile ? item.label : undefined}
+                      >
+                        <item.icon
                           className={cn(
-                            "flex items-center gap-3 px-2 py-2 rounded-md text-sm font-medium transition-all cursor-pointer",
-                            isActive
-                              ? "bg-primary/15 text-primary border border-primary/20"
-                              : "text-sidebar-foreground/70 hover:text-sidebar-foreground hover:bg-sidebar-accent",
-                            collapsed && "justify-center px-2"
+                            "shrink-0",
+                            collapsed && !isMobile ? "w-5 h-5" : "w-4 h-4",
+                            isActive ? "text-primary" : "text-muted-foreground"
                           )}
-                          title={collapsed ? item.label : undefined}
-                        >
-                          <item.icon
-                            className={cn(
-                              "shrink-0",
-                              collapsed ? "w-5 h-5" : "w-4 h-4",
-                              isActive ? "text-primary" : "text-muted-foreground"
-                            )}
-                          />
-                          {!collapsed && <span className="truncate">{item.label}</span>}
-                        </span>
-                      </Link>
-                    </li>
-                  );
-                })}
-              </ul>
-            </div>
-          ))}
-        </nav>
+                        />
+                        {(!collapsed || isMobile) && (
+                          <span className="truncate">{item.label}</span>
+                        )}
+                      </span>
+                    </Link>
+                  </li>
+                );
+              })}
+            </ul>
+          </div>
+        ))}
+      </nav>
 
-        {/* Footer */}
-        <div className="border-t border-sidebar-border p-2 space-y-1">
-          <Link href="/settings">
-            <span
-              className={cn(
-                "flex items-center gap-3 px-2 py-2 rounded-md text-sm font-medium text-sidebar-foreground/60 hover:text-sidebar-foreground hover:bg-sidebar-accent transition-all cursor-pointer",
-                collapsed && "justify-center"
-              )}
-              title={collapsed ? "Settings" : undefined}
-            >
-              <Settings className={cn("shrink-0", collapsed ? "w-5 h-5" : "w-4 h-4")} />
-              {!collapsed && <span>Settings</span>}
-            </span>
-          </Link>
+      {/* Footer */}
+      <div className="border-t border-sidebar-border p-2 space-y-1">
+        <Link href="/settings">
+          <span
+            className={cn(
+              "flex items-center gap-3 px-2 py-2.5 rounded-md text-sm font-medium text-sidebar-foreground/60 hover:text-sidebar-foreground hover:bg-sidebar-accent transition-all cursor-pointer",
+              collapsed && !isMobile && "justify-center"
+            )}
+            title={collapsed && !isMobile ? "Settings" : undefined}
+          >
+            <Settings className={cn("shrink-0", collapsed && !isMobile ? "w-5 h-5" : "w-4 h-4")} />
+            {(!collapsed || isMobile) && <span>Settings</span>}
+          </span>
+        </Link>
+        {!isMobile && (
           <button
             onClick={() => setCollapsed(!collapsed)}
             className={cn(
-              "flex items-center gap-3 px-2 py-2 rounded-md text-sm font-medium text-sidebar-foreground/60 hover:text-sidebar-foreground hover:bg-sidebar-accent transition-all w-full",
+              "flex items-center gap-3 px-2 py-2.5 rounded-md text-sm font-medium text-sidebar-foreground/60 hover:text-sidebar-foreground hover:bg-sidebar-accent transition-all w-full",
               collapsed && "justify-center"
             )}
           >
@@ -147,13 +169,74 @@ export default function SalesLayout({ children }: SalesLayoutProps) {
               </>
             )}
           </button>
-        </div>
+        )}
+        {/* Privacy badge */}
+        {(!collapsed || isMobile) && (
+          <div className="mx-2 mt-2 px-2 py-1.5 rounded-md bg-emerald-500/10 border border-emerald-500/20">
+            <p className="text-[10px] text-emerald-400 font-medium text-center">
+              🔒 All data stays local
+            </p>
+          </div>
+        )}
+      </div>
+    </>
+  );
+
+  return (
+    <div className="flex h-screen overflow-hidden bg-background">
+      {/* ── Desktop sidebar ── */}
+      <aside
+        className={cn(
+          "hidden md:flex flex-col border-r border-border bg-sidebar transition-all duration-300 shrink-0",
+          collapsed ? "w-16" : "w-60"
+        )}
+      >
+        <SidebarContent />
       </aside>
 
-      {/* Main content */}
-      <main className="flex-1 overflow-y-auto min-w-0">
-        {children}
-      </main>
+      {/* ── Mobile drawer overlay ── */}
+      {mobileOpen && (
+        <div
+          className="fixed inset-0 z-40 bg-black/60 backdrop-blur-sm md:hidden"
+          onClick={() => setMobileOpen(false)}
+          aria-hidden="true"
+        />
+      )}
+
+      {/* ── Mobile drawer panel ── */}
+      <aside
+        className={cn(
+          "fixed inset-y-0 left-0 z-50 flex flex-col w-72 bg-sidebar border-r border-border transition-transform duration-300 md:hidden",
+          mobileOpen ? "translate-x-0" : "-translate-x-full"
+        )}
+      >
+        <SidebarContent isMobile />
+      </aside>
+
+      {/* ── Main content ── */}
+      <div className="flex flex-col flex-1 min-w-0 overflow-hidden">
+        {/* Mobile top bar */}
+        <header className="flex md:hidden items-center gap-3 px-4 py-3 border-b border-border bg-sidebar shrink-0">
+          <button
+            onClick={() => setMobileOpen(true)}
+            className="p-2 rounded-md text-muted-foreground hover:text-foreground hover:bg-sidebar-accent transition-colors"
+            aria-label="Open menu"
+          >
+            <Menu className="w-5 h-5" />
+          </button>
+          <div className="flex items-center gap-2">
+            <div className="flex items-center justify-center w-6 h-6 rounded-md bg-primary/20 border border-primary/30">
+              <Mic className="w-3.5 h-3.5 text-primary" />
+            </div>
+            <span className="text-sm font-semibold text-foreground">SalesLens</span>
+          </div>
+        </header>
+
+        {/* Page content */}
+        <main className="flex-1 overflow-y-auto min-w-0 pb-safe">
+          {children}
+        </main>
+      </div>
     </div>
   );
 }

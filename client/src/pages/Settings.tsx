@@ -59,10 +59,10 @@ export default function Settings() {
   const whisperOk = health?.whisper?.running;
 
   return (
-    <div className="p-6 max-w-3xl mx-auto space-y-6">
+    <div className="p-4 sm:p-6 max-w-3xl mx-auto space-y-6">
         {/* Header */}
         <div>
-          <h1 className="text-2xl font-semibold text-foreground">Settings</h1>
+          <h1 className="text-xl sm:text-2xl font-semibold text-foreground">Settings</h1>
           <p className="text-muted-foreground mt-1 text-sm">
             Configure your local AI stack. All data stays on your machine.
           </p>
@@ -83,7 +83,7 @@ export default function Settings() {
         {/* AI Service Health */}
         <Card className="bg-card border-border">
           <CardHeader className="pb-3">
-            <div className="flex items-center justify-between">
+            <div className="flex items-center justify-between gap-3">
               <CardTitle className="text-base flex items-center gap-2">
                 <Server className="h-4 w-4 text-primary" />
                 Local AI Service Status
@@ -394,7 +394,7 @@ export default function Settings() {
         {/* About */}
         <Card className="bg-card border-border">
           <CardContent className="pt-4 pb-4">
-            <div className="flex items-center justify-between">
+            <div className="flex items-center justify-between gap-3">
               <div>
                 <p className="text-sm font-medium">SalesLens</p>
                 <p className="text-xs text-muted-foreground">

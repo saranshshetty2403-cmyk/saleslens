@@ -75,3 +75,20 @@
 - [x] settings router tests
 - [x] SPICED/MEDDPICC field name validation tests
 - [x] 18/18 tests passing
+
+## Mobile Responsiveness
+- [x] SalesLayout: hamburger menu button on mobile, slide-in drawer sidebar with overlay
+- [x] SalesLayout: hide sidebar by default on mobile (md breakpoint), show on md+
+- [x] Dashboard: responsive stat cards grid (2-col on mobile, 4-col on desktop)
+- [x] Dashboard: stack Recent Meetings + Quick Actions vertically on mobile
+- [x] Meetings: responsive list/card layout on mobile
+- [x] NewMeeting: full-width form fields on mobile (single-column grids)
+- [x] MeetingDetail: wrapping tabs and responsive padding on mobile
+- [x] SPICED Reports: responsive padding and header on mobile
+- [x] MEDDPICC Reports: responsive padding and header on mobile
+- [x] ActionItems: responsive padding and grids on mobile
+- [x] DealTimeline: responsive padding on mobile
+- [x] Notes: responsive padding on mobile
+- [x] Settings: responsive padding and stacked sections on mobile
+- [x] Global: mobile safe-area utilities (pb-safe), text-size-adjust
+- [x] index.html: viewport-fit=cover, Apple mobile web app meta tags, theme-color

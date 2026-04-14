@@ -45,19 +45,20 @@ export default function Meetings() {
   const displayed = search.length > 1 ? searchResults : meetings;
 
   return (
-    <div className="p-6 space-y-5">
+    <div className="p-4 sm:p-6 space-y-4 sm:space-y-5">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-semibold text-foreground">Meetings</h1>
+          <h1 className="text-xl sm:text-2xl font-semibold text-foreground">Meetings</h1>
           <p className="text-sm text-muted-foreground mt-0.5">
             {meetings?.length ?? 0} total meetings
           </p>
         </div>
         <Link href="/meetings/new">
-          <Button size="sm" className="gap-2">
+          <Button size="sm" className="gap-2 shrink-0">
             <Plus className="w-4 h-4" />
-            New Meeting
+            <span className="hidden sm:inline">New Meeting</span>
+            <span className="sm:hidden">New</span>
           </Button>
         </Link>
       </div>
@@ -104,7 +105,7 @@ export default function Meetings() {
         {displayed?.map((meeting) => (
           <Link key={meeting.id} href={`/meetings/${meeting.id}`}>
             <Card className="bg-card border-border hover:border-primary/30 hover:bg-accent/20 transition-all cursor-pointer">
-              <CardContent className="p-4">
+              <CardContent className="p-3 sm:p-4">
                 <div className="flex items-center gap-4">
                   {/* Platform icon */}
                   <div className="w-10 h-10 rounded-lg bg-primary/10 border border-primary/20 flex items-center justify-center shrink-0">
@@ -115,8 +116,11 @@ export default function Meetings() {
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 mb-1">
                       <p className="text-sm font-semibold text-foreground truncate">{meeting.title}</p>
+                      <span className={`sm:hidden text-[10px] px-1.5 py-0.5 rounded-full font-medium shrink-0 status-${meeting.status}`}>
+                        {STATUS_LABELS[meeting.status]}
+                      </span>
                     </div>
-                    <div className="flex items-center gap-3 text-xs text-muted-foreground flex-wrap">
+                    <div className="flex items-center gap-2 sm:gap-3 text-xs text-muted-foreground flex-wrap">
                       {meeting.accountName && (
                         <span className="flex items-center gap-1">
                           <ExternalLink className="w-3 h-3" />
@@ -145,7 +149,7 @@ export default function Meetings() {
                   </div>
 
                   {/* Badges */}
-                  <div className="flex items-center gap-2 shrink-0">
+                  <div className="hidden sm:flex items-center gap-2 shrink-0">
                     <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium platform-${meeting.platform}`}>
                       {PLATFORM_LABELS[meeting.platform]}
                     </span>

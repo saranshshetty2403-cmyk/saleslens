@@ -151,7 +151,7 @@ export default function MeetingDetail() {
   const isProcessing = generateAnalysisMutation.isPending || generateSpicedMutation.isPending || generateMeddpiccMutation.isPending;
 
   return (
-    <div className="p-6 space-y-5">
+    <div className="p-4 sm:p-6 space-y-4 sm:space-y-5">
       {/* Header */}
       <div className="flex items-start gap-3">
         <Link href="/meetings">
@@ -162,9 +162,9 @@ export default function MeetingDetail() {
         </Link>
       </div>
 
-      <div className="flex items-start justify-between gap-4">
+      <div className="flex items-start justify-between gap-3 flex-wrap">
         <div>
-          <h1 className="text-xl font-semibold text-foreground">{meeting.title}</h1>
+          <h1 className="text-lg sm:text-xl font-semibold text-foreground">{meeting.title}</h1>
           <div className="flex items-center gap-3 mt-1.5 text-xs text-muted-foreground flex-wrap">
             {meeting.accountName && <span>{meeting.accountName}</span>}
             {meeting.contactName && <span>· {meeting.contactName}</span>}
@@ -219,27 +219,27 @@ export default function MeetingDetail() {
 
       {/* Main Tabs */}
       <Tabs defaultValue="transcript" className="space-y-4">
-        <TabsList className="bg-card border border-border">
-          <TabsTrigger value="transcript" className="gap-1.5 text-xs">
+        <TabsList className="bg-card border border-border flex-wrap h-auto gap-0.5 p-1">
+          <TabsTrigger value="transcript" className="gap-1 text-xs px-2 py-1.5">
             <FileText className="w-3.5 h-3.5" />
             Transcript
           </TabsTrigger>
-          <TabsTrigger value="analysis" className="gap-1.5 text-xs">
+          <TabsTrigger value="analysis" className="gap-1 text-xs px-2 py-1.5">
             <Activity className="w-3.5 h-3.5" />
             Analysis
             {analysis && <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 ml-0.5" />}
           </TabsTrigger>
-          <TabsTrigger value="spiced" className="gap-1.5 text-xs">
+          <TabsTrigger value="spiced" className="gap-1 text-xs px-2 py-1.5">
             <TrendingUp className="w-3.5 h-3.5" />
             SPICED
             {spiced && <span className="w-1.5 h-1.5 rounded-full bg-blue-400 ml-0.5" />}
           </TabsTrigger>
-          <TabsTrigger value="meddpicc" className="gap-1.5 text-xs">
+          <TabsTrigger value="meddpicc" className="gap-1 text-xs px-2 py-1.5">
             <BarChart3 className="w-3.5 h-3.5" />
             MEDDPICC
             {meddpicc && <span className="w-1.5 h-1.5 rounded-full bg-purple-400 ml-0.5" />}
           </TabsTrigger>
-          <TabsTrigger value="actions" className="gap-1.5 text-xs">
+          <TabsTrigger value="actions" className="gap-1 text-xs px-2 py-1.5">
             <CheckSquare className="w-3.5 h-3.5" />
             Actions
             {actionItems && actionItems.length > 0 && (

@@ -24,9 +24,9 @@ export default function SpicedReports() {
   const { data: meetings } = trpc.meetings.list.useQuery({ limit: 100, offset: 0 });
 
   return (
-    <div className="p-6 space-y-5">
+    <div className="p-4 sm:p-6 space-y-5">
       <div>
-        <h1 className="text-2xl font-semibold text-foreground">SPICED Reports</h1>
+        <h1 className="text-xl sm:text-2xl font-semibold text-foreground">SPICED Reports</h1>
         <p className="text-sm text-muted-foreground mt-0.5">
           Situation · Pain · Impact · Critical Event · Decision
         </p>
@@ -61,7 +61,7 @@ function SpicedCard({ meeting }: { meeting: { id: number; title: string; account
     <Link href={`/meetings/${meeting.id}?tab=spiced`}>
       <Card className="bg-card border-border hover:border-primary/30 hover:bg-accent/10 transition-all cursor-pointer">
         <CardHeader className="pb-3">
-          <div className="flex items-center justify-between">
+          <div className="flex items-center justify-between gap-3">
             <CardTitle className="text-sm font-semibold text-foreground flex items-center gap-2">
               <TrendingUp className="w-3.5 h-3.5 text-primary" />
               {meeting.title}
