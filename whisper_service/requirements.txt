@@ -1,0 +1,17 @@
+# SalesLens — Whisper Transcription Microservice Dependencies
+# Install with: pip install -r requirements.txt
+
+# Core transcription engine (faster-whisper = CTranslate2 optimized Whisper)
+faster-whisper>=1.0.3
+
+# Web server
+flask>=3.0.0
+flask-cors>=4.0.0
+
+# Optional: GPU support (uncomment if using NVIDIA GPU)
+# torch>=2.0.0
+
+# Optional: Speaker diarization (uncomment for multi-speaker labeling)
+# pyannote.audio>=3.1.0
+# torch>=2.0.0
+# torchaudio>=2.0.0

@@ -1,0 +1,8 @@
+{
+  "query": "ALTER TABLE `ai_analyses` MODIFY COLUMN `painPoints` json; ALTER TABLE `ai_analyses` MODIFY COLUMN `objections` json; ALTER TABLE `ai_analyses` MODIFY COLUMN `buyingSignals` json; ALTER TABLE `ai_analyses` MODIFY COLUMN `nextSteps` json; ALTER TABLE `ai_analyses` MODIFY COLUMN `keyQuotes` json; ALTER TABLE `ai_analyses` MODIFY COLUMN `talkRatio` json; ALTER TABLE `meetings` MODIFY COLUMN `participants` json; ALTER TABLE `transcripts` MODIFY COLUMN `segments` json; ALTER TABLE `transcripts` MODIFY COLUMN `speakerMap` json;",
+  "command": "mysql --batch --raw --column-names --default-character-set=utf8mb4 --host gateway05.us-east-1.prod.aws.tidbcloud.com --port 4000 --user 3XzMR6exhZEn1DL.a4fde2aa4cd7 --database i5UAP5JRgPnNifM9y6ZxHx --execute ALTER TABLE `ai_analyses` MODIFY COLUMN `painPoints` json; ALTER TABLE `ai_analyses` MODIFY COLUMN `objections` json; ALTER TABLE `ai_analyses` MODIFY COLUMN `buyingSignals` json; ALTER TABLE `ai_analyses` MODIFY COLUMN `nextSteps` json; ALTER TABLE `ai_analyses` MODIFY COLUMN `keyQuotes` json; ALTER TABLE `ai_analyses` MODIFY COLUMN `talkRatio` json; ALTER TABLE `meetings` MODIFY COLUMN `participants` json; ALTER TABLE `transcripts` MODIFY COLUMN `segments` json; ALTER TABLE `transcripts` MODIFY COLUMN `speakerMap` json;",
+  "returncode": 1,
+  "logs": [
+    "ERROR 1146 (42S02) at line 1: Table 'i5uap5jrgpnnifm9y6zxhx.ai_analyses' doesn't exist"
+  ]
+}
