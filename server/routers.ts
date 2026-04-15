@@ -25,6 +25,20 @@ import {
 } from "./hackerearth-kb";
 
 // ─── LLM fallback model list ─────────────────────────────────────────────────
+/** Returns true if the error message indicates a quota/rate-limit problem */
+function isQuotaError(msg: string): boolean {
+  return (
+    msg.includes("quota") ||
+    msg.includes("rate") ||
+    msg.includes("429") ||
+    msg.includes("resource_exhausted") ||
+    msg.includes("too many") ||
+    msg.includes("limit exceeded") ||
+    msg.includes("capacity") ||
+    msg.includes("overloaded") ||
+    msg.includes("temporarily unavailable")
+  );
+}
 const LLM_FALLBACK_MODELS = [
   "gemini-2.0-flash",
   "gemini-1.5-flash",
@@ -48,21 +62,20 @@ async function callLLM(messages: Array<{ role: "system" | "user" | "assistant"; 
       const rawContent = response.choices?.[0]?.message?.content ?? "{}";
       const content = typeof rawContent === "string" ? rawContent : "{}";
       try { return JSON.parse(content); } catch { return {}; }
-    } catch (err: unknown) {
-      const msg = (err instanceof Error ? err.message : String(err)).toLowerCase();
-      const isQuotaOrRate = msg.includes("quota") || msg.includes("rate") || msg.includes("429") || msg.includes("resource_exhausted") || msg.includes("too many");
+    } catch (err: unknown) {      const msg = (err instanceof Error ? err.message : String(err)).toLowerCase();
+      const isQuotaOrRate = isQuotaError(msg);
       if (isQuotaOrRate) {
         lastError = err instanceof Error ? err : new Error(String(err));
-        console.warn(`[LLM] Model ${model} quota/rate-limited, trying next fallback...`);
+        console.warn(`[LLM] Model ${model} quota/rate-limited, trying next fallback... (${msg.slice(0, 120)})`);
         continue;
       }
       throw err; // Non-quota error — propagate immediately
     }
   }
-  throw lastError ?? new Error("All LLM models exhausted quota");
+  console.error("[LLM] All fallback models exhausted quota. Last error:", lastError?.message);
+  throw new Error("AI generation is temporarily unavailable due to high demand. Please try again in a few minutes.");
 }
-
-// ─── Helper: call LLM for plain text output + model fallback ─────────────────
+// ─── Helper: call LLM for plain text output + model fallback ─────────────────────
 async function callLLMText(messages: Array<{ role: "system" | "user" | "assistant"; content: string }>) {
   let lastError: Error | null = null;
   for (const model of LLM_FALLBACK_MODELS) {
@@ -75,19 +88,18 @@ async function callLLMText(messages: Array<{ role: "system" | "user" | "assistan
       return typeof rawContent === "string" ? rawContent : "";
     } catch (err: unknown) {
       const msg = (err instanceof Error ? err.message : String(err)).toLowerCase();
-      const isQuotaOrRate = msg.includes("quota") || msg.includes("rate") || msg.includes("429") || msg.includes("resource_exhausted") || msg.includes("too many");
+      const isQuotaOrRate = isQuotaError(msg);
       if (isQuotaOrRate) {
         lastError = err instanceof Error ? err : new Error(String(err));
-        console.warn(`[LLM] Model ${model} quota/rate-limited, trying next fallback...`);
+        console.warn(`[LLM] Model ${model} quota/rate-limited, trying next fallback... (${msg.slice(0, 120)})`);
         continue;
       }
       throw err;
     }
   }
-  throw lastError ?? new Error("All LLM models exhausted quota");
-}
-
-// ─── Meetings Router ──────────────────────────────────────────────────────────
+  console.error("[LLM] All fallback models exhausted quota. Last error:", lastError?.message);
+  throw new Error("AI generation is temporarily unavailable due to high demand. Please try again in a few minutes.");
+}// ─── Meetings Router ──────────────────────────────────────────────────────────
 const meetingsRouter = router({
   list: publicProcedure.input(z.object({ limit: z.number().optional(), offset: z.number().optional(), search: z.string().optional() }).optional()).query(async ({ input }) => {
     if (input?.search) return searchMeetings(input.search);

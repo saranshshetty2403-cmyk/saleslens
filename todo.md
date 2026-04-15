@@ -138,3 +138,28 @@
 - [x] Apply fallback to: email style learning (callLLM)
 - [x] Apply fallback to: deck generator (already used callLLM)
 - [x] Apply fallback to: deal summary generation (callLLM)
+
+## Bug: Quota Error Still Surfacing
+- [ ] Diagnose why quota error still reaches the user despite fallback chain
+- [ ] Check if the error message format from the API matches the detection strings
+- [ ] Broaden error detection to catch all quota/rate-limit variants
+- [ ] Add user-friendly error message when all models are exhausted
+
+## Bug: Email Generator Crash on Open
+- [ ] Diagnose the crash when navigating to /email
+- [ ] Fix the root cause (likely a missing data fetch or undefined access)
+
+## Bug: Quota Error Still Surfacing (Round 2)
+- [ ] Check actual error response body from the LLM API to see exact error string
+- [ ] Broaden quota detection to catch all variants (RESOURCE_EXHAUSTED, 429, quota, rate_limit, etc.)
+- [ ] Add user-friendly error toast when all fallback models are exhausted
+- [ ] Ensure the fallback chain is actually being invoked (add server-side logging)
+
+## Bug: Email Generator Crash on Open
+- [ ] Check if trpc.emails.list query crashes on page load
+- [ ] Check if getGeneratedEmails in db.ts crashes for Postgres (isPg path)
+- [ ] Fix any undefined/null access in EmailGenerator.tsx on initial render
+
+## Test: Deck Generator — Simular AI Case Study
+- [ ] Test deck generator with custom type: HackerEarth hackathon case studies relevant to Simular AI
+- [ ] Verify deck output includes relevant hackathon examples and Simular AI context

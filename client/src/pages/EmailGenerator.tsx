@@ -39,7 +39,7 @@ const PROMPT_SUGGESTIONS = [
 
 export default function EmailGenerator() {
   const [prompt, setPrompt] = useState("");
-  const [selectedMeetingId, setSelectedMeetingId] = useState<string>("");
+  const [selectedMeetingId, setSelectedMeetingId] = useState<string>("none");
   const [generated, setGenerated] = useState<{ id: number; subject: string; body: string } | null>(null);
   const [showFeedback, setShowFeedback] = useState(false);
   const [editedBody, setEditedBody] = useState("");
@@ -74,7 +74,7 @@ export default function EmailGenerator() {
     if (!prompt.trim()) return;
     generateMutation.mutate({
       prompt: prompt.trim(),
-      meetingId: selectedMeetingId ? parseInt(selectedMeetingId) : undefined,
+      meetingId: selectedMeetingId && selectedMeetingId !== "none" ? parseInt(selectedMeetingId) : undefined,
     });
   };
 
@@ -201,7 +201,7 @@ export default function EmailGenerator() {
                 <SelectValue placeholder="No meeting selected" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="">No meeting</SelectItem>
+                <SelectItem value="none">No meeting selected</SelectItem>
                 {meetings.map((m: any) => (
                   <SelectItem key={m.id} value={String(m.id)}>
                     {m.title}

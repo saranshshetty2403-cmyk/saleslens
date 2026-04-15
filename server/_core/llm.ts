@@ -322,12 +322,18 @@ export async function invokeLLM(params: InvokeParams): Promise<InvokeResult> {
     body: JSON.stringify(payload),
   });
 
-  if (!response.ok) {
+   if (!response.ok) {
     const errorText = await response.text();
     throw new Error(
       `LLM invoke failed: ${response.status} ${response.statusText} – ${errorText}`
     );
   }
-
-  return (await response.json()) as InvokeResult;
+  const json = await response.json();
+  // Some LLM gateways return 200 OK but embed error info in the body
+  if (json && typeof json === "object" && "error" in json) {
+    const errObj = (json as Record<string, unknown>).error;
+    const errMsg = typeof errObj === "string" ? errObj : JSON.stringify(errObj);
+    throw new Error(`LLM invoke failed: 200 OK but error in body – ${errMsg}`);
+  }
+  return json as InvokeResult;
 }
