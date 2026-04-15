@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useParams, Link } from "wouter";
+import { useParams, Link, useSearch } from "wouter";
 import { trpc } from "@/lib/trpc";
 import type { AiAnalysis, SpicedReport, MeddpiccReport, PitchCoaching, PreCallIntelligence, AnalysisItem } from "../../../drizzle/schema";
 import { toast } from "sonner";
@@ -29,9 +29,11 @@ export default function MeetingDetail() {
   const meetingId = parseInt(params.id ?? "0");
   const utils = trpc.useUtils();
 
+  const search = useSearch();
+  const initialTab = new URLSearchParams(search).get("tab") ?? "transcript";
   const [transcriptInput, setTranscriptInput] = useState("");
   const [isUploading, setIsUploading] = useState(false);
-  const [activeTab, setActiveTab] = useState("transcript");
+  const [activeTab, setActiveTab] = useState(initialTab);
 
   // ─── Queries ─────────────────────────────────────────────────────────────
   const { data: meeting, isLoading: meetingLoading } = trpc.meetings.get.useQuery({ id: meetingId });

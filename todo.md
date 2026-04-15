@@ -63,3 +63,7 @@
 - [x] GitHub repository created: https://github.com/saranshshetty2403-cmyk/saleslens
 - [x] Code pushed to GitHub
 - [x] Checkpoint saved
+
+## Bug Fixes
+- [x] Fix SPICED reports: clicking a report navigates to /meetings instead of showing the report detail
+- [x] Fix SPICED reports: report detail not displayed after navigation

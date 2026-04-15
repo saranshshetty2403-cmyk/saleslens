@@ -1,7 +1,8 @@
 import { trpc } from "@/lib/trpc";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { TrendingUp } from "lucide-react";
-import { Link } from "wouter";
+import { Badge } from "@/components/ui/badge";
+import { TrendingUp, ChevronRight } from "lucide-react";
+import { useLocation } from "wouter";
 import { formatDistanceToNow } from "date-fns";
 
 const SPICED_FIELDS = ["situation", "pain", "impact", "criticalEvent", "decision"] as const;
@@ -56,46 +57,68 @@ export default function SpicedReports() {
 
 function SpicedCard({ meeting }: { meeting: { id: number; title: string; accountName?: string | null; createdAt: Date } }) {
   const { data: spiced } = trpc.spiced.get.useQuery({ meetingId: meeting.id });
+  const [, navigate] = useLocation();
+
+  const handleClick = () => {
+    navigate(`/meetings/${meeting.id}?tab=spiced`);
+  };
+
+  const filledCount = spiced
+    ? SPICED_FIELDS.filter((f) => !!(spiced as Record<string, unknown>)[f]).length
+    : 0;
 
   return (
-    <Link href={`/meetings/${meeting.id}?tab=spiced`}>
-      <Card className="bg-card border-border hover:border-primary/30 hover:bg-accent/10 transition-all cursor-pointer">
-        <CardHeader className="pb-3">
-          <div className="flex items-center justify-between gap-3">
-            <CardTitle className="text-sm font-semibold text-foreground flex items-center gap-2">
-              <TrendingUp className="w-3.5 h-3.5 text-primary" />
-              {meeting.title}
-            </CardTitle>
+    <Card
+      className="bg-card border-border hover:border-primary/30 hover:bg-accent/10 transition-all cursor-pointer"
+      onClick={handleClick}
+    >
+      <CardHeader className="pb-3">
+        <div className="flex items-center justify-between gap-3">
+          <CardTitle className="text-sm font-semibold text-foreground flex items-center gap-2">
+            <TrendingUp className="w-3.5 h-3.5 text-primary" />
+            {meeting.title}
+          </CardTitle>
+          <div className="flex items-center gap-2 shrink-0">
+            {spiced ? (
+              <Badge variant="outline" className="text-[10px] text-emerald-400 border-emerald-400/30">
+                {filledCount}/5 fields
+              </Badge>
+            ) : (
+              <Badge variant="outline" className="text-[10px] text-muted-foreground">
+                Not generated
+              </Badge>
+            )}
             <span className="text-xs text-muted-foreground">
               {formatDistanceToNow(new Date(meeting.createdAt), { addSuffix: true })}
             </span>
+            <ChevronRight className="w-3.5 h-3.5 text-muted-foreground" />
           </div>
-          {meeting.accountName && (
-            <p className="text-xs text-muted-foreground">{meeting.accountName}</p>
-          )}
-        </CardHeader>
-        <CardContent>
-          {!spiced ? (
-            <p className="text-xs text-muted-foreground italic">No SPICED report generated yet — open meeting to generate</p>
-          ) : (
-            <div className="grid grid-cols-1 md:grid-cols-5 gap-2">
-              {SPICED_FIELDS.map((field) => (
-                <div key={field} className="space-y-1">
-                  <p className={`text-[10px] font-bold uppercase tracking-wider ${COLORS[field]}`}>
-                    {LABELS[field]}
-                  </p>
-                  <p className="text-xs text-foreground line-clamp-3 leading-relaxed">
-                    {(spiced as Record<string, unknown>)[field]
-                      ? String((spiced as Record<string, unknown>)[field])
-                      : <span className="text-muted-foreground italic">Not captured</span>
-                    }
-                  </p>
-                </div>
-              ))}
-            </div>
-          )}
-        </CardContent>
-      </Card>
-    </Link>
+        </div>
+        {meeting.accountName && (
+          <p className="text-xs text-muted-foreground">{meeting.accountName}</p>
+        )}
+      </CardHeader>
+      <CardContent>
+        {!spiced ? (
+          <p className="text-xs text-muted-foreground italic">No SPICED report generated yet — click to open meeting and generate</p>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-5 gap-2">
+            {SPICED_FIELDS.map((field) => (
+              <div key={field} className="space-y-1">
+                <p className={`text-[10px] font-bold uppercase tracking-wider ${COLORS[field]}`}>
+                  {LABELS[field]}
+                </p>
+                <p className="text-xs text-foreground line-clamp-3 leading-relaxed">
+                  {(spiced as Record<string, unknown>)[field]
+                    ? String((spiced as Record<string, unknown>)[field])
+                    : <span className="text-muted-foreground italic">Not captured</span>
+                  }
+                </p>
+              </div>
+            ))}
+          </div>
+        )}
+      </CardContent>
+    </Card>
   );
 }

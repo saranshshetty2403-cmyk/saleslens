@@ -1,7 +1,8 @@
 import { trpc } from "@/lib/trpc";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { BarChart3 } from "lucide-react";
-import { Link } from "wouter";
+import { Badge } from "@/components/ui/badge";
+import { BarChart3, ChevronRight } from "lucide-react";
+import { useLocation } from "wouter";
 import { formatDistanceToNow } from "date-fns";
 
 const MEDDPICC_FIELDS = [
@@ -67,46 +68,68 @@ export default function MeddpiccReports() {
 
 function MeddpiccCard({ meeting }: { meeting: { id: number; title: string; accountName?: string | null; createdAt: Date } }) {
   const { data: meddpicc } = trpc.meddpicc.get.useQuery({ meetingId: meeting.id });
+  const [, navigate] = useLocation();
+
+  const handleClick = () => {
+    navigate(`/meetings/${meeting.id}?tab=meddpicc`);
+  };
+
+  const filledCount = meddpicc
+    ? MEDDPICC_FIELDS.filter((f) => !!(meddpicc as Record<string, unknown>)[f]).length
+    : 0;
 
   return (
-    <Link href={`/meetings/${meeting.id}?tab=meddpicc`}>
-      <Card className="bg-card border-border hover:border-primary/30 hover:bg-accent/10 transition-all cursor-pointer">
-        <CardHeader className="pb-3">
-          <div className="flex items-center justify-between gap-3">
-            <CardTitle className="text-sm font-semibold text-foreground flex items-center gap-2">
-              <BarChart3 className="w-3.5 h-3.5 text-primary" />
-              {meeting.title}
-            </CardTitle>
+    <Card
+      className="bg-card border-border hover:border-primary/30 hover:bg-accent/10 transition-all cursor-pointer"
+      onClick={handleClick}
+    >
+      <CardHeader className="pb-3">
+        <div className="flex items-center justify-between gap-3">
+          <CardTitle className="text-sm font-semibold text-foreground flex items-center gap-2">
+            <BarChart3 className="w-3.5 h-3.5 text-primary" />
+            {meeting.title}
+          </CardTitle>
+          <div className="flex items-center gap-2 shrink-0">
+            {meddpicc ? (
+              <Badge variant="outline" className="text-[10px] text-emerald-400 border-emerald-400/30">
+                {filledCount}/8 fields
+              </Badge>
+            ) : (
+              <Badge variant="outline" className="text-[10px] text-muted-foreground">
+                Not generated
+              </Badge>
+            )}
             <span className="text-xs text-muted-foreground">
               {formatDistanceToNow(new Date(meeting.createdAt), { addSuffix: true })}
             </span>
+            <ChevronRight className="w-3.5 h-3.5 text-muted-foreground" />
           </div>
-          {meeting.accountName && (
-            <p className="text-xs text-muted-foreground">{meeting.accountName}</p>
-          )}
-        </CardHeader>
-        <CardContent>
-          {!meddpicc ? (
-            <p className="text-xs text-muted-foreground italic">No MEDDPICC report generated yet — open meeting to generate</p>
-          ) : (
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-              {MEDDPICC_FIELDS.map((field) => (
-                <div key={field} className="space-y-1">
-                  <p className={`text-[10px] font-bold uppercase tracking-wider ${COLORS[field]}`}>
-                    {LABELS[field]}
-                  </p>
-                  <p className="text-xs text-foreground line-clamp-2 leading-relaxed">
-                    {(meddpicc as Record<string, unknown>)[field]
-                      ? String((meddpicc as Record<string, unknown>)[field])
-                      : <span className="text-muted-foreground italic">Not captured</span>
-                    }
-                  </p>
-                </div>
-              ))}
-            </div>
-          )}
-        </CardContent>
-      </Card>
-    </Link>
+        </div>
+        {meeting.accountName && (
+          <p className="text-xs text-muted-foreground">{meeting.accountName}</p>
+        )}
+      </CardHeader>
+      <CardContent>
+        {!meddpicc ? (
+          <p className="text-xs text-muted-foreground italic">No MEDDPICC report generated yet — click to open meeting and generate</p>
+        ) : (
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            {MEDDPICC_FIELDS.map((field) => (
+              <div key={field} className="space-y-1">
+                <p className={`text-[10px] font-bold uppercase tracking-wider ${COLORS[field]}`}>
+                  {LABELS[field]}
+                </p>
+                <p className="text-xs text-foreground line-clamp-2 leading-relaxed">
+                  {(meddpicc as Record<string, unknown>)[field]
+                    ? String((meddpicc as Record<string, unknown>)[field])
+                    : <span className="text-muted-foreground italic">Not captured</span>
+                  }
+                </p>
+              </div>
+            ))}
+          </div>
+        )}
+      </CardContent>
+    </Card>
   );
 }
