@@ -1,7 +1,9 @@
 // Vercel Serverless Function entry point.
-// Imports from the pre-built bundle (dist/vercel-app.js) which is generated
-// during the build step. This avoids Vercel's TypeScript compiler failing to
-// resolve relative imports from ../server/_core/*.
-import app from "../dist/vercel-app.js";
+// Imports from the pre-built CJS bundle (dist/vercel-app.cjs) which is generated
+// during the build step. Using CJS format to avoid ESM/CJS interop issues with
+// Express and its dependencies that use dynamic require().
+import { createRequire } from "module";
+const require = createRequire(import.meta.url);
+const app = require("../dist/vercel-app.cjs");
 
-export default app;
+export default app.default ?? app;
