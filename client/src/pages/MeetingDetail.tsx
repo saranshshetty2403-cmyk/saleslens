@@ -12,8 +12,20 @@ import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   ArrowLeft, Zap, Loader2, Upload, FileText, Brain, Target, TrendingUp,
-  CheckSquare, MessageSquare, AlertCircle, ChevronDown, ChevronUp, Edit3, Save, X
+  CheckSquare, MessageSquare, AlertCircle, ChevronDown, ChevronUp, Edit3, Save, X, Trash2
 } from "lucide-react";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
+import { useLocation } from "wouter";
 import { Streamdown } from "streamdown";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -35,6 +47,7 @@ export default function MeetingDetail() {
   const [transcriptInput, setTranscriptInput] = useState("");
   const [isUploading, setIsUploading] = useState(false);
   const [activeTab, setActiveTab] = useState(initialTab);
+  const [, setLocation] = useLocation();
 
   // ─── Queries ─────────────────────────────────────────────────────────────
   const { data: meeting, isLoading: meetingLoading } = trpc.meetings.get.useQuery({ id: meetingId });
@@ -49,6 +62,14 @@ export default function MeetingDetail() {
       utils.transcripts.get.invalidate({ meetingId });
     },
     onError: (err) => toast.error(err.message),
+  });
+
+  const deleteMutation = trpc.meetings.delete.useMutation({
+    onSuccess: () => {
+      toast.success("Meeting deleted");
+      setLocation("/meetings");
+    },
+    onError: (err) => toast.error(err.message || "Failed to delete meeting"),
   });
 
   const generateAllMutation = trpc.analyze.full.useMutation({
@@ -161,15 +182,47 @@ export default function MeetingDetail() {
               <span className="text-xs text-muted-foreground">{format(tsToDate(meeting.createdAt), "MMM d, yyyy")}</span>
           </div>
         </div>
-        <Button
-          onClick={handleGenerateAll}
-          disabled={!hasTranscript || isProcessing}
-          className="gap-2 shrink-0 bg-primary hover:bg-primary/90"
-          size="sm"
-        >
-          {isProcessing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Zap className="w-4 h-4" />}
-          {isProcessing ? "Generating..." : "Generate All Reports"}
-        </Button>
+        <div className="flex items-center gap-2">
+          <AlertDialog>
+            <AlertDialogTrigger asChild>
+              <Button
+                variant="outline"
+                size="sm"
+                className="gap-2 shrink-0 border-red-500/40 text-red-400 hover:bg-red-500/10 hover:text-red-400"
+                disabled={deleteMutation.isPending}
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                Delete
+              </Button>
+            </AlertDialogTrigger>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Delete this meeting?</AlertDialogTitle>
+                <AlertDialogDescription>
+                  This will permanently delete <strong>{meeting.title}</strong> along with its transcript, AI reports, and action items. This cannot be undone.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel>Cancel</AlertDialogCancel>
+                <AlertDialogAction
+                  className="bg-red-600 hover:bg-red-700 text-white"
+                  onClick={() => deleteMutation.mutate({ id: meetingId })}
+                >
+                  {deleteMutation.isPending ? "Deleting..." : "Yes, delete"}
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
+          <Button
+            onClick={handleGenerateAll}
+            disabled={!hasTranscript || isProcessing}
+            className="gap-2 shrink-0 bg-primary hover:bg-primary/90"
+            size="sm"
+          >
+            {isProcessing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Zap className="w-4 h-4" />}
+            {isProcessing ? "Generating..." : "Generate All Reports"}
+          </Button>
+        </div>
       </div>
 
       {/* Tabs */}

@@ -92,31 +92,36 @@
 - [x] DealTimeline: accordion expand showing meeting details inline
 
 ## Feature: Smart Account Auto-Linking
-- [ ] Add `accountId` FK column to meetings table (links to new accounts table)
-- [ ] Create `accounts` table: id, name, domain, industry, createdAt
-- [ ] Add `emailStyleProfile` table: stores learned email preferences per user
-- [ ] Add `emailFeedback` column to generatedEmails: accepted boolean, userEdits text
-- [ ] Server: add `meetings.extractIdentity` procedure — LLM extracts company+contact from transcript
-- [ ] Server: add `meetings.matchAccount` procedure — fuzzy match extracted identity against existing accounts
-- [ ] Server: add `accounts.list` and `accounts.create` procedures
-- [ ] Frontend: after transcript analysis, show identity confirmation dialog if confidence < 0.85
-- [ ] Frontend: confirmation dialog shows extracted name + dropdown of existing accounts + "New Account"
+- [x] Add `accountId` FK column to meetings table (links to new accounts table)
+- [x] Create `accounts` table: id, name, domain, industry, createdAt
+- [x] Add `emailStyleProfile` table: stores learned email preferences per user
+- [x] Add `emailFeedback` column to generatedEmails: accepted boolean, userEdits text
+- [x] Server: add `accounts.findMatch` procedure — fuzzy match company name against existing accounts
+- [x] Server: add `accounts.linkMeeting` procedure — links a meeting to an account
+- [x] Server: add `accounts.list`, `accounts.get`, `accounts.create`, `accounts.meetings` procedures
+- [x] Frontend: Accounts page lists all accounts, create new, click to view deal thread
+- [x] Frontend: Auto-link dialog shown after transcript analysis (if not already linked)
 
 ## Feature: Deal Summary (Multi-Call Consolidation)
-- [ ] Add `dealSummaries` table: accountId, consolidatedMeddpicc json, consolidatedSpiced json, dealHealthScore, trend json, updatedAt
-- [ ] Server: add `dealSummary.generate` procedure — fetches all meetings for account, runs LLM consolidation
-- [ ] Server: add `dealSummary.get` procedure — returns latest summary for an account
-- [ ] Frontend: new Deal Summary page showing per-account consolidated view
-- [ ] Frontend: deal health score trend chart (sparkline per account)
-- [ ] Frontend: side-by-side call comparison within Deal Summary
+- [x] Add `dealSummaries` table: accountId, consolidatedMeddpicc json, consolidatedSpiced json, dealHealthScore, trend json, updatedAt
+- [x] Server: add `dealSummary.generate` procedure — fetches all meetings for account, runs LLM consolidation
+- [x] Server: add `dealSummary.get` procedure — returns latest summary for an account
+- [x] Frontend: new Deal Summary page showing per-account consolidated view
+- [x] Frontend: deal health score trend chart (sparkline per account)
+- [x] Frontend: call timeline within Deal Summary
 
 ## Feature: Email Generator Redesign
-- [ ] Remove recipient/company/context pre-fill from EmailGenerator
-- [ ] Add free-form "What do you want to say?" textarea as primary input
-- [ ] Add optional meeting context selector (collapsed by default)
-- [ ] After generation: show "Accept & Save" / "Regenerate" / "Edit then Save" buttons
-- [ ] Save accepted email with `accepted=true` flag in DB
-- [ ] Save user edits as `userEdits` text in DB
-- [ ] Server: add `emailStyle.learn` procedure — analyzes accepted emails to build style profile
-- [ ] Server: add `emailStyle.getProfile` procedure — returns current learned style preferences
-- [ ] Inject style profile into email generation prompt automatically
+- [x] Remove recipient/company/context pre-fill from EmailGenerator
+- [x] Add free-form "What do you want to say?" textarea as primary input
+- [x] Add optional meeting context selector (collapsed by default)
+- [x] After generation: show "Accept" / "Regenerate" / thumbs up/down buttons
+- [x] Save accepted email with `accepted=true` flag in DB
+- [x] Save user edits as `userEdits` text in DB
+- [x] Server: add `emails.accept` procedure — saves accepted email + triggers style learning
+- [x] Server: add `emails.styleProfile` procedure — returns current learned style preferences
+- [x] Inject style profile into email generation prompt automatically
+
+## Feature: Delete Meeting
+- [ ] Add delete button to Meetings list page (per-row, with confirmation)
+- [ ] Add delete button to Meeting Detail page header (with confirmation dialog)
+- [ ] After deletion, redirect to /meetings
