@@ -1,3 +1,4 @@
+import { tsToDate } from "@/lib/dateUtils";
 // @ts-nocheck
 import { trpc } from "@/lib/trpc";
 import { Button } from "@/components/ui/button";
@@ -171,7 +172,7 @@ function ActionRow({
   };
   onUpdate: (data: Partial<{ status: "open" | "in_progress" | "completed" | "cancelled"; priority: "low" | "medium" | "high" | "urgent" }>) => void;
 }) {
-  const isOverdue = item.dueDate && new Date(item.dueDate) < new Date() && item.status !== "completed";
+  const isOverdue = item.dueDate && tsToDate(item.dueDate) < new Date() && item.status !== "completed";
 
   return (
     <Card className="bg-card border-border hover:border-border/80 transition-colors">
@@ -208,7 +209,7 @@ function ActionRow({
               {item.dueDate && (
                 <span className={`text-[10px] ${isOverdue ? "text-red-400 font-medium" : "text-muted-foreground"}`}>
                   {isOverdue ? "Overdue · " : "Due "}
-                  {format(new Date(item.dueDate), "MMM d, yyyy")}
+                  {format(tsToDate(item.dueDate), "MMM d, yyyy")}
                 </span>
               )}
               {item.isAiGenerated && (

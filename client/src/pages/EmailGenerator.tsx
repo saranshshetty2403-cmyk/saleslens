@@ -1,3 +1,4 @@
+import { tsToDate } from "@/lib/dateUtils";
 // @ts-nocheck
 import { trpc } from "@/lib/trpc";
 import { Button } from "@/components/ui/button";
@@ -269,7 +270,7 @@ export default function EmailGenerator() {
                       </p>
                       <p className="text-[10px] text-muted-foreground mt-0.5">
                         {email.recipientName && `To: ${email.recipientName} · `}
-                        {formatDistanceToNow(new Date(email.createdAt), { addSuffix: true })}
+                        {formatDistanceToNow(tsToDate(email.createdAt), { addSuffix: true })}
                       </p>
                     </div>
                     <button

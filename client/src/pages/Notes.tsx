@@ -1,3 +1,4 @@
+import { tsToDate } from "@/lib/dateUtils";
 // @ts-nocheck
 import { trpc } from "@/lib/trpc";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -33,7 +34,7 @@ export default function Notes() {
                   </CardTitle>
                   <p className="text-xs text-muted-foreground">
                     {meeting.accountName && `${meeting.accountName} · `}
-                    {formatDistanceToNow(new Date(meeting.createdAt), { addSuffix: true })}
+                    {formatDistanceToNow(tsToDate(meeting.createdAt), { addSuffix: true })}
                   </p>
                 </CardHeader>
                 <CardContent>

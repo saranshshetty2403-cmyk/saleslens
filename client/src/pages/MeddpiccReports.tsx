@@ -1,3 +1,4 @@
+import { tsToDate } from "@/lib/dateUtils";
 // @ts-nocheck
 import { trpc } from "@/lib/trpc";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -101,7 +102,7 @@ function MeddpiccCard({ meeting }: { meeting: { id: number; title: string; accou
               </Badge>
             )}
             <span className="text-xs text-muted-foreground">
-              {formatDistanceToNow(new Date(meeting.createdAt), { addSuffix: true })}
+              {formatDistanceToNow(tsToDate(meeting.createdAt), { addSuffix: true })}
             </span>
             <ChevronRight className="w-3.5 h-3.5 text-muted-foreground" />
           </div>

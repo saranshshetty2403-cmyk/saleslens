@@ -1,3 +1,4 @@
+import { tsToDate } from "@/lib/dateUtils";
 import { useState } from "react";
 import { useParams, Link, useSearch } from "wouter";
 import { trpc } from "@/lib/trpc";
@@ -157,7 +158,7 @@ export default function MeetingDetail() {
               {meeting.accountName && <Badge variant="outline" className="text-xs">{meeting.accountName}</Badge>}
               {meeting.contactName && <span className="text-xs text-muted-foreground">{meeting.contactName as string}</span>}
               {meeting.dealStage && <Badge className="text-xs bg-primary/10 text-primary border-primary/20">{meeting.dealStage}</Badge>}
-              <span className="text-xs text-muted-foreground">{format(new Date(meeting.createdAt as Date), "MMM d, yyyy")}</span>
+              <span className="text-xs text-muted-foreground">{format(tsToDate(meeting.createdAt), "MMM d, yyyy")}</span>
           </div>
         </div>
         <Button
@@ -764,8 +765,8 @@ function ActionItemsTab({ meetingId, items, updateMutation }: {
                 "border-border text-muted-foreground"
               }`}>{item.priority}</span>
               {item.dueDate && (
-                <span className={`text-[10px] ${new Date(item.dueDate) < new Date() && item.status !== "completed" ? "text-red-400" : "text-muted-foreground"}`}>
-                  Due {format(new Date(item.dueDate), "MMM d")}
+                <span className={`text-[10px] ${tsToDate(item.dueDate) < new Date() && item.status !== "completed" ? "text-red-400" : "text-muted-foreground"}`}>
+                  Due {format(tsToDate(item.dueDate), "MMM d")}
                 </span>
               )}
               {item.isAiGenerated && <span className="text-[9px] px-1.5 py-0 rounded bg-primary/10 text-primary border border-primary/20">AI</span>}

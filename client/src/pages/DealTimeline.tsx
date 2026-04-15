@@ -1,3 +1,4 @@
+import { tsToDate } from "@/lib/dateUtils";
 // @ts-nocheck
 import { trpc } from "@/lib/trpc";
 import { Card, CardContent } from "@/components/ui/card";
@@ -79,7 +80,7 @@ export default function DealTimeline() {
 
                 <div className="space-y-3">
                   {(accountMeetings || [])
-                    .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime())
+                    .sort((a, b) => tsToDate(a.createdAt).getTime() - tsToDate(b.createdAt).getTime())
                     .map((meeting, idx) => (
                       <Link key={meeting.id} href={`/meetings/${meeting.id}`}>
                         <div className="relative flex items-start gap-4 pl-8 group">
@@ -95,7 +96,7 @@ export default function DealTimeline() {
                                   <p className="text-sm font-medium text-foreground truncate">{meeting.title}</p>
                                   <div className="flex items-center gap-2 mt-1 flex-wrap">
                                     <span className="text-[10px] text-muted-foreground">
-                                      {format(new Date(meeting.createdAt), "MMM d, yyyy")}
+                                      {format(tsToDate(meeting.createdAt), "MMM d, yyyy")}
                                     </span>
                                     {meeting.contactName && (
                                       <span className="text-[10px] text-muted-foreground">· {meeting.contactName}</span>

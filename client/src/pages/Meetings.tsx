@@ -1,3 +1,4 @@
+import { tsToDate } from "@/lib/dateUtils";
 // @ts-nocheck
 import { trpc } from "@/lib/trpc";
 import { Button } from "@/components/ui/button";
@@ -136,12 +137,12 @@ export default function Meetings() {
                       )}
                       <span className="flex items-center gap-1">
                         <Clock className="w-3 h-3" />
-                        {formatDistanceToNow(new Date(meeting.createdAt), { addSuffix: true })}
+                        {formatDistanceToNow(tsToDate(meeting.createdAt), { addSuffix: true })}
                       </span>
                       {meeting.scheduledAt && (
                         <span className="flex items-center gap-1">
                           <Calendar className="w-3 h-3" />
-                          {format(new Date(meeting.scheduledAt), "MMM d, h:mm a")}
+                          {format(tsToDate(meeting.scheduledAt), "MMM d, h:mm a")}
                         </span>
                       )}
                     </div>

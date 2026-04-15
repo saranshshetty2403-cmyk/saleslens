@@ -1,3 +1,4 @@
+import { tsToDate } from "@/lib/dateUtils";
 // @ts-nocheck
 import { trpc } from "@/lib/trpc";
 import { Badge } from "@/components/ui/badge";
@@ -43,7 +44,7 @@ export default function Dashboard() {
 
   const openActions = actionItems?.filter((a) => a.status === "open" || a.status === "in_progress") ?? [];
   const overdueActions = openActions.filter(
-    (a) => a.dueDate && new Date(a.dueDate) < new Date()
+    (a) => a.dueDate && tsToDate(a.dueDate) < new Date()
   );
 
   return (
@@ -136,7 +137,7 @@ export default function Dashboard() {
                       <p className="text-sm font-medium text-foreground truncate">{meeting.title}</p>
                       <p className="text-xs text-muted-foreground truncate">
                         {meeting.accountName && `${meeting.accountName} · `}
-                        {formatDistanceToNow(new Date(meeting.createdAt), { addSuffix: true })}
+                        {formatDistanceToNow(tsToDate(meeting.createdAt), { addSuffix: true })}
                       </p>
                     </div>
                     <div className="hidden sm:flex items-center gap-2 shrink-0">
@@ -223,8 +224,8 @@ export default function Dashboard() {
                   <div className="flex-1 min-w-0">
                     <p className="text-xs font-medium text-foreground truncate">{item.title}</p>
                     {item.dueDate && (
-                      <p className={`text-[10px] mt-0.5 ${new Date(item.dueDate) < new Date() ? "text-red-400" : "text-muted-foreground"}`}>
-                        Due {formatDistanceToNow(new Date(item.dueDate), { addSuffix: true })}
+                      <p className={`text-[10px] mt-0.5 ${tsToDate(item.dueDate) < new Date() ? "text-red-400" : "text-muted-foreground"}`}>
+                        Due {formatDistanceToNow(tsToDate(item.dueDate), { addSuffix: true })}
                       </p>
                     )}
                   </div>
