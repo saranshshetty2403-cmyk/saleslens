@@ -155,12 +155,9 @@ export async function searchTranscripts(query: string) {
 export async function upsertAiAnalysis(data: InsertAiAnalysis) {
   const db = await getDb();
   if (!db) throw new Error("DB not available");
-  const existing = await db.select().from(aiAnalyses).where(eq(aiAnalyses.meetingId, data.meetingId)).limit(1);
-  if (existing.length > 0) {
-    await db.update(aiAnalyses).set(data).where(eq(aiAnalyses.meetingId, data.meetingId));
-    return existing[0].id;
-  }
-  const result = await db.insert(aiAnalyses).values(data);
+  // Use atomic INSERT ... ON DUPLICATE KEY UPDATE to avoid race conditions
+  const { meetingId: _m, id: _i, createdAt: _c, ...updateFields } = data as Record<string, unknown>;
+  const result = await db.insert(aiAnalyses).values(data).onDuplicateKeyUpdate({ set: updateFields as Partial<InsertAiAnalysis> });
   return result[0].insertId;
 }
 
@@ -175,12 +172,8 @@ export async function getAiAnalysisByMeetingId(meetingId: number) {
 export async function upsertSpicedReport(data: InsertSpicedReport) {
   const db = await getDb();
   if (!db) throw new Error("DB not available");
-  const existing = await db.select().from(spicedReports).where(eq(spicedReports.meetingId, data.meetingId)).limit(1);
-  if (existing.length > 0) {
-    await db.update(spicedReports).set(data).where(eq(spicedReports.meetingId, data.meetingId));
-    return existing[0].id;
-  }
-  const result = await db.insert(spicedReports).values(data);
+  const { meetingId: _m, id: _i, createdAt: _c, ...updateFields } = data as Record<string, unknown>;
+  const result = await db.insert(spicedReports).values(data).onDuplicateKeyUpdate({ set: updateFields as Partial<InsertSpicedReport> });
   return result[0].insertId;
 }
 
@@ -195,12 +188,8 @@ export async function getSpicedReportByMeetingId(meetingId: number) {
 export async function upsertMeddpiccReport(data: InsertMeddpiccReport) {
   const db = await getDb();
   if (!db) throw new Error("DB not available");
-  const existing = await db.select().from(meddpiccReports).where(eq(meddpiccReports.meetingId, data.meetingId)).limit(1);
-  if (existing.length > 0) {
-    await db.update(meddpiccReports).set(data).where(eq(meddpiccReports.meetingId, data.meetingId));
-    return existing[0].id;
-  }
-  const result = await db.insert(meddpiccReports).values(data);
+  const { meetingId: _m, id: _i, createdAt: _c, ...updateFields } = data as Record<string, unknown>;
+  const result = await db.insert(meddpiccReports).values(data).onDuplicateKeyUpdate({ set: updateFields as Partial<InsertMeddpiccReport> });
   return result[0].insertId;
 }
 
@@ -306,12 +295,8 @@ import {
 export async function upsertPitchCoaching(data: InsertPitchCoaching) {
   const db = await getDb();
   if (!db) throw new Error("DB not available");
-  const existing = await db.select().from(pitchCoaching).where(eq(pitchCoaching.meetingId, data.meetingId)).limit(1);
-  if (existing.length > 0) {
-    await db.update(pitchCoaching).set(data).where(eq(pitchCoaching.meetingId, data.meetingId));
-    return existing[0].id;
-  }
-  const result = await db.insert(pitchCoaching).values(data);
+  const { meetingId: _m, id: _i, createdAt: _c, ...updateFields } = data as Record<string, unknown>;
+  const result = await db.insert(pitchCoaching).values(data).onDuplicateKeyUpdate({ set: updateFields as Partial<InsertPitchCoaching> });
   return result[0].insertId;
 }
 
@@ -326,12 +311,8 @@ export async function getPitchCoachingByMeetingId(meetingId: number) {
 export async function upsertPreCallIntelligence(data: InsertPreCallIntelligence) {
   const db = await getDb();
   if (!db) throw new Error("DB not available");
-  const existing = await db.select().from(preCallIntelligence).where(eq(preCallIntelligence.meetingId, data.meetingId)).limit(1);
-  if (existing.length > 0) {
-    await db.update(preCallIntelligence).set(data).where(eq(preCallIntelligence.meetingId, data.meetingId));
-    return existing[0].id;
-  }
-  const result = await db.insert(preCallIntelligence).values(data);
+  const { meetingId: _m, id: _i, createdAt: _c, ...updateFields } = data as Record<string, unknown>;
+  const result = await db.insert(preCallIntelligence).values(data).onDuplicateKeyUpdate({ set: updateFields as Partial<InsertPreCallIntelligence> });
   return result[0].insertId;
 }
 
