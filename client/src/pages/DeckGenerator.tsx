@@ -276,8 +276,8 @@ export default function DeckGenerator() {
                       onClick={() => setExpandedSlide(expandedSlide === slide.slideNumber ? null : slide.slideNumber)}
                     >
                       <span className="text-xs font-mono text-muted-foreground w-5 shrink-0">{slide.slideNumber}</span>
-                      <Badge className={`text-[10px] px-1.5 py-0 border shrink-0 ${SLIDE_TYPE_COLORS[slide.type] || SLIDE_TYPE_COLORS.custom}`}>
-                        {slide.type.replace(/_/g, " ")}
+                      <Badge className={`text-[10px] px-1.5 py-0 border shrink-0 ${SLIDE_TYPE_COLORS[slide.type ?? "custom"] || SLIDE_TYPE_COLORS.custom}`}>
+                        {(slide.type ?? "custom").replace(/_/g, " ")}
                       </Badge>
                       <span className="text-sm font-medium text-foreground flex-1">{slide.title}</span>
                       {expandedSlide === slide.slideNumber ? (
@@ -291,7 +291,7 @@ export default function DeckGenerator() {
                         <div>
                           <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide mb-1.5">Key Points</p>
                           <ul className="space-y-1">
-                            {slide.keyPoints.map((p, i) => (
+                            {(slide.keyPoints ?? []).map((p, i) => (
                               <li key={i} className="flex items-start gap-2 text-xs text-foreground">
                                 <span className="text-primary mt-0.5">•</span>{p}
                               </li>

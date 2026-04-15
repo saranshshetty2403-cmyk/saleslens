@@ -812,7 +812,27 @@ const decksRouter = router({
       additionalProperties: false,
     }, "deck_outline");
 
-    return result;
+    // Normalize: sanitize undefined/invalid fields so the frontend never crashes
+    const VALID_SLIDE_TYPES = new Set(["title","agenda","problem","solution","product_demo","case_study","roi","pricing","next_steps","custom"]);
+    const normalized = {
+      ...result,
+      deckTitle: result.deckTitle || "Sales Deck",
+      deckSubtitle: result.deckSubtitle || "",
+      promisesMade: Array.isArray(result.promisesMade) ? result.promisesMade : [],
+      clientRequests: Array.isArray(result.clientRequests) ? result.clientRequests : [],
+      recommendedProducts: Array.isArray(result.recommendedProducts) ? result.recommendedProducts : [],
+      estimatedDeckLength: typeof result.estimatedDeckLength === "number" ? result.estimatedDeckLength : 0,
+      slides: (Array.isArray(result.slides) ? result.slides : []).map((s: Record<string, unknown>, idx: number) => ({
+        slideNumber: typeof s.slideNumber === "number" ? s.slideNumber : idx + 1,
+        title: typeof s.title === "string" && s.title ? s.title : `Slide ${idx + 1}`,
+        type: (typeof s.type === "string" && VALID_SLIDE_TYPES.has(s.type)) ? s.type : "custom",
+        keyPoints: Array.isArray(s.keyPoints) ? s.keyPoints.filter((p: unknown) => typeof p === "string") : [],
+        speakerNotes: typeof s.speakerNotes === "string" ? s.speakerNotes : "",
+        dataNeeded: typeof s.dataNeeded === "string" ? s.dataNeeded : "None",
+        addressesRequest: typeof s.addressesRequest === "string" ? s.addressesRequest : "None",
+      })),
+    };
+    return normalized;
   }),
 });
 
