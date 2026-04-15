@@ -1,28 +1,7 @@
-// Vercel Serverless Function entry point
-// This file adapts the Express app to run as a Vercel serverless function.
-import "dotenv/config";
-import express from "express";
-import { createExpressMiddleware } from "@trpc/server/adapters/express";
-import { registerOAuthRoutes } from "../server/_core/oauth";
-import { appRouter } from "../server/routers";
-import { createContext } from "../server/_core/context";
-
-const app = express();
-
-// Body parser
-app.use(express.json({ limit: "50mb" }));
-app.use(express.urlencoded({ limit: "50mb", extended: true }));
-
-// OAuth callback
-registerOAuthRoutes(app);
-
-// tRPC API
-app.use(
-  "/api/trpc",
-  createExpressMiddleware({
-    router: appRouter,
-    createContext,
-  })
-);
+// Vercel Serverless Function entry point.
+// Imports from the pre-built bundle (dist/vercel-app.js) which is generated
+// during the build step. This avoids Vercel's TypeScript compiler failing to
+// resolve relative imports from ../server/_core/*.
+import app from "../dist/vercel-app.js";
 
 export default app;
