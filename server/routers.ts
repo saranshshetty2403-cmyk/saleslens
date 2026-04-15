@@ -26,10 +26,11 @@ import {
 
 // ─── Multi-provider LLM fallback chain ────────────────────────────────────────
 
-/** Returns true if the error indicates a quota/rate-limit/capacity problem */
-function isQuotaError(msg: string): boolean {
+/** Returns true if the error should trigger trying the next provider */
+function isRetryableError(msg: string): boolean {
   const lower = msg.toLowerCase();
   return (
+    // Quota / rate-limit errors
     lower.includes("quota") ||
     lower.includes("rate") ||
     lower.includes("429") ||
@@ -41,9 +42,20 @@ function isQuotaError(msg: string): boolean {
     lower.includes("temporarily unavailable") ||
     lower.includes("service unavailable") ||
     lower.includes("insufficient_quota") ||
-    lower.includes("model_not_available")
+    lower.includes("model_not_available") ||
+    // Empty / malformed response — provider failed to generate
+    lower.includes("returned empty") ||
+    lower.includes("returned invalid json") ||
+    lower.includes("empty json object") ||
+    // Server errors from provider
+    lower.includes("500") ||
+    lower.includes("502") ||
+    lower.includes("503") ||
+    lower.includes("504")
   );
 }
+// Keep old name as alias for backward compat
+const isQuotaError = isRetryableError;
 
 type LLMProvider = {
   name: string;
@@ -137,7 +149,16 @@ async function callLLM(
       const responseFormat = { type: "json_schema", json_schema: { name: schemaName, strict: true, schema } };
       const raw = await callProviderRaw(provider, messages, responseFormat);
       const cleaned = raw.replace(/^```(?:json)?\s*/i, "").replace(/\s*```\s*$/i, "").trim();
-      try { return JSON.parse(cleaned); } catch { return {}; }
+      if (!cleaned) throw new Error(`LLM [${provider.name}] returned empty response`);
+      let parsed: unknown;
+      try { parsed = JSON.parse(cleaned); } catch {
+        throw new Error(`LLM [${provider.name}] returned invalid JSON: ${cleaned.slice(0, 200)}`);
+      }
+      if (!parsed || typeof parsed !== "object" || Object.keys(parsed as object).length === 0) {
+        throw new Error(`LLM [${provider.name}] returned empty JSON object`);
+      }
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      return parsed as any;
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
       if (isQuotaError(msg)) {
