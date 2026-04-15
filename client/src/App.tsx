@@ -14,6 +14,8 @@ import SpicedReports from "./pages/SpicedReports";
 import MeddpiccReports from "./pages/MeddpiccReports";
 import ActionItems from "./pages/ActionItems";
 import DealTimeline from "./pages/DealTimeline";
+import Accounts from "./pages/Accounts";
+import DealSummaryPage from "./pages/DealSummary";
 import Notes from "./pages/Notes";
 import Settings from "./pages/Settings";
 import Analyze from "./pages/Analyze";
@@ -47,6 +49,9 @@ function Router() {
         {/* Workflow */}
         <Route path="/actions" component={ActionItems} />
         <Route path="/timeline" component={DealTimeline} />
+        {/* Accounts & Deal Threads */}
+        <Route path="/accounts" component={Accounts} />
+        <Route path="/accounts/:accountId" component={DealSummaryPage} />
         <Route path="/notes" component={Notes} />
         <Route path="/settings" component={Settings} />
         <Route path="/404" component={NotFound} />

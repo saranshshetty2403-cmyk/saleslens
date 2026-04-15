@@ -3,6 +3,7 @@ import {
   Activity,
   BarChart3,
   BookOpen,
+  Building2,
   CheckSquare,
   ChevronLeft,
   ChevronRight,
@@ -56,6 +57,12 @@ const navItems = [
     items: [
       { label: "Battlecards", icon: Swords, path: "/battlecards" },
       { label: "Objection Library", icon: Shield, path: "/objections" },
+    ],
+  },
+  {
+    group: "Accounts",
+    items: [
+      { label: "Accounts & Deals", icon: Building2, path: "/accounts" },
     ],
   },
   {

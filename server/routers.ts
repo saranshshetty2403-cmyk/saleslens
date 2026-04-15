@@ -14,6 +14,10 @@ import {
   upsertPreCallIntelligence, getPreCallIntelligenceByMeetingId,
   createProspect, getProspects, getProspectById, updateProspect, deleteProspect,
   createGeneratedEmail, getGeneratedEmails, deleteGeneratedEmail,
+  getAllAccounts, getAccountById, createAccount, updateAccount, findMatchingAccount, getMeetingsByAccountId,
+  getDealSummaryByAccountId, getAllDealSummaries, upsertDealSummary,
+  acceptGeneratedEmail, getAcceptedEmails, updateEmailStyleProfile, getEmailStyleProfile, updateGeneratedEmailStyleNotes,
+  normalizeAccountName,
 } from "./db";
 import {
   HACKEREARTH_SYSTEM_PROMPT, HACKEREARTH_COMPETITORS, HACKEREARTH_OBJECTIONS,
@@ -272,15 +276,62 @@ const analyzeRouter = router({
       }
     }
 
-    // Update meeting status
+    // ─── Auto-link account ──────────────────────────────────────────────────
+    const detectedCompany = analysis.companyIdentified || preCall.companyName || accountName;
+    const detectedContact = analysis.contactRole ? undefined : contactName; // contactName from input
+    let resolvedAccountId: number | undefined;
+    let autoLinked = false;
+    let needsConfirmation = false;
+    let matchCandidates: Array<{ id: number; name: string; confidence: number }> = [];
+
+    if (detectedCompany) {
+      const { account, confidence, candidates } = await findMatchingAccount(detectedCompany);
+      if (account) {
+        // High-confidence auto-link
+        resolvedAccountId = account.id;
+        autoLinked = true;
+        // Update account with latest contact info
+        await updateAccount(account.id, {
+          primaryContactName: contactName || account.primaryContactName,
+          primaryContactTitle: analysis.contactRole || account.primaryContactTitle,
+        });
+      } else if (confidence >= 0.5 && candidates.length > 0) {
+        // Partial match — ask user
+        needsConfirmation = true;
+        matchCandidates = candidates.map((c) => ({ id: c.account.id, name: c.account.name, confidence: c.confidence }));
+      } else {
+        // No match — create new account
+        const newAccountId = await createAccount({
+          name: detectedCompany,
+          normalizedName: normalizeAccountName(detectedCompany),
+          industry: preCall.industry || undefined,
+          companySize: preCall.companySize || undefined,
+          primaryContactName: contactName || undefined,
+          primaryContactTitle: analysis.contactRole || undefined,
+        });
+        resolvedAccountId = newAccountId;
+        autoLinked = true;
+      }
+    }
+
+    // Update meeting status + accountId
     await updateMeeting(meetingId, {
       status: "completed",
-      accountName: analysis.companyIdentified || undefined,
+      accountName: detectedCompany || undefined,
+      accountId: resolvedAccountId,
     });
 
     return {
       analysis, spiced, meddpicc, coaching, preCall,
       prospects: prospectsData.prospects || [],
+      accountLinking: {
+        autoLinked,
+        needsConfirmation,
+        detectedCompany: detectedCompany || null,
+        detectedContact: contactName || null,
+        resolvedAccountId: resolvedAccountId ?? null,
+        candidates: matchCandidates,
+      },
     };
   }),
 
@@ -382,32 +433,20 @@ const prospectsRouter = router({
 // ─── Email Generator Router ───────────────────────────────────────────────────
 const emailsRouter = router({
   list: publicProcedure.input(z.object({ meetingId: z.number().optional() }).optional()).query(({ input }) => getGeneratedEmails(input?.meetingId)),
-    generate: publicProcedure.input(z.object({
-    meetingId: z.number().optional(),
-    prospectId: z.number().optional(),
-    emailType: z.enum(["follow_up","cold_outreach","objection_response","demo_follow_up","proposal_follow_up","custom"]),
-    context: z.string(),
-    recipientName: z.string().optional(),
-    recipientTitle: z.string().optional(),
-    recipientCompany: z.string().optional(),
-    transcript: z.string().optional(),
+
+  // Free-form email generator: user describes what they want, AI writes it
+  generate: publicProcedure.input(z.object({
+    prompt: z.string(), // What the user wants to say / the intent of the email
+    meetingId: z.number().optional(), // Optional: attach to a specific meeting for context
   })).mutation(async ({ input }) => {
-    const emailTypeDescriptions: Record<string, string> = {
-      follow_up: "post-meeting follow-up email summarizing what was discussed and confirming next steps",
-      cold_outreach: "cold outreach email to a new prospect who has never heard of HackerEarth",
-      objection_response: "email responding to a specific objection raised by the prospect",
-      demo_follow_up: "post-demo follow-up email with a summary of what was shown and a clear next step",
-      proposal_follow_up: "follow-up on a sent proposal, addressing any concerns and pushing for a decision",
-      custom: "custom email based on the provided context",
-    };
+    // Fetch style profile to personalize generation
+    const styleProfile = await getEmailStyleProfile();
+    const styleBlock = styleProfile
+      ? `\n\nUSER'S WRITING STYLE PREFERENCES (learned from accepted emails):\n- Tone: ${styleProfile.tone || "professional"}\n- Length: ${styleProfile.avgLength || "concise"}\n- Opening style: ${styleProfile.openingStyle || "direct"}\n- Closing style: ${styleProfile.closingStyle || "single CTA"}\n- Phrases to use: ${(styleProfile.preferredPhrases || []).join(", ") || "none noted"}\n- Phrases to avoid: ${(styleProfile.avoidPhrases || []).join(", ") || "none noted"}\n- Structure notes: ${styleProfile.structureNotes || "none"}`
+      : "";
 
-    // Auto-enrich context from meeting data when meetingId is provided
-    let enrichedContext = input.context;
-    let resolvedRecipient = input.recipientName;
-    let resolvedTitle = input.recipientTitle;
-    let resolvedCompany = input.recipientCompany;
-    let transcriptText = input.transcript ?? "";
-
+    // Optionally enrich with meeting context
+    let meetingContextBlock = "";
     if (input.meetingId) {
       const [meeting, transcriptRow, analysis, spiced] = await Promise.all([
         getMeetingById(input.meetingId),
@@ -415,58 +454,35 @@ const emailsRouter = router({
         getAiAnalysisByMeetingId(input.meetingId),
         getSpicedReportByMeetingId(input.meetingId),
       ]);
-
       if (meeting) {
-        resolvedRecipient = resolvedRecipient || meeting.contactName || undefined;
-        resolvedTitle = resolvedTitle || meeting.contactTitle || undefined;
-        resolvedCompany = resolvedCompany || meeting.accountName || undefined;
-
-        // Build rich context block from all available meeting data
-        const contextParts: string[] = [];
-
-        if (meeting.title) contextParts.push(`Meeting: ${meeting.title}`);
-        if (meeting.accountName) contextParts.push(`Account: ${meeting.accountName}`);
-        if (meeting.contactName) contextParts.push(`Contact: ${meeting.contactName}${meeting.contactTitle ? ` (${meeting.contactTitle})` : ""}`);
-        if (meeting.dealStage) contextParts.push(`Deal Stage: ${meeting.dealStage}`);
-        if (meeting.dealValue) contextParts.push(`Deal Value: ${meeting.dealValue}`);
-        if (meeting.platform) contextParts.push(`Platform: ${meeting.platform}`);
-
+        const parts: string[] = [];
+        if (meeting.title) parts.push(`Meeting: ${meeting.title}`);
+        if (meeting.accountName) parts.push(`Account: ${meeting.accountName}`);
+        if (meeting.contactName) parts.push(`Contact: ${meeting.contactName}${meeting.contactTitle ? ` (${meeting.contactTitle})` : ""}`);
+        if (meeting.dealStage) parts.push(`Deal Stage: ${meeting.dealStage}`);
+        if (meeting.dealValue) parts.push(`Deal Value: ${meeting.dealValue}`);
         if (analysis) {
           type AI = { text: string }[];
           const toText = (v: unknown) => Array.isArray(v) ? (v as AI).map(i => i.text).filter(Boolean).join("; ") : "";
-          if (analysis.summary) contextParts.push(`\nMeeting Summary: ${analysis.summary}`);
-          const pp = toText(analysis.painPoints); if (pp) contextParts.push(`Pain Points Identified: ${pp}`);
-          const bs = toText(analysis.buyingSignals); if (bs) contextParts.push(`Buying Signals: ${bs}`);
-          const ob = toText(analysis.objections); if (ob) contextParts.push(`Objections Raised: ${ob}`);
-          const ns = toText(analysis.nextSteps); if (ns) contextParts.push(`Agreed Next Steps: ${ns}`);
+          if (analysis.summary) parts.push(`Meeting Summary: ${analysis.summary}`);
+          const pp = toText(analysis.painPoints); if (pp) parts.push(`Pain Points: ${pp}`);
+          const bs = toText(analysis.buyingSignals); if (bs) parts.push(`Buying Signals: ${bs}`);
+          const ns = toText(analysis.nextSteps); if (ns) parts.push(`Next Steps: ${ns}`);
         }
-
         if (spiced) {
-          if (spiced.situation) contextParts.push(`\nSituation (SPICED): ${spiced.situation}`);
-          if (spiced.pain) contextParts.push(`Pain (SPICED): ${spiced.pain}`);
-          if (spiced.impact) contextParts.push(`Impact (SPICED): ${spiced.impact}`);
-          if (spiced.criticalEvent) contextParts.push(`Critical Event: ${spiced.criticalEvent}`);
-          if (spiced.decision) contextParts.push(`Decision Process: ${spiced.decision}`);
+          if (spiced.pain) parts.push(`Pain (SPICED): ${spiced.pain}`);
+          if (spiced.impact) parts.push(`Impact (SPICED): ${spiced.impact}`);
+          if (spiced.criticalEvent) parts.push(`Critical Event: ${spiced.criticalEvent}`);
         }
-
-        if (transcriptRow?.fullText) {
-          transcriptText = transcriptRow.fullText;
-        }
-
-        // Prepend meeting context; append any manual context the user typed
-        const meetingContextBlock = contextParts.join("\n");
-        enrichedContext = meetingContextBlock + (input.context.trim() ? `\n\nAdditional Instructions: ${input.context}` : "");
+        if (transcriptRow?.fullText) parts.push(`\nTranscript excerpt:\n${transcriptRow.fullText.slice(0, 2000)}`);
+        meetingContextBlock = `\n\nMEETING CONTEXT:\n${parts.join("\n")}`;
       }
     }
 
-    const transcriptContext = transcriptText
-      ? `\n\nRELEVANT TRANSCRIPT EXCERPT:\n${transcriptText.slice(0, 3000)}`
-      : "";
-
     const response = await invokeLLM({
       messages: [
-        { role: "system", content: EMAIL_STYLE_PROMPT + "\n\n" + HACKEREARTH_SYSTEM_PROMPT },
-        { role: "user", content: `Write a ${emailTypeDescriptions[input.emailType]} for:\n- Recipient: ${resolvedRecipient || "the prospect"} (${resolvedTitle || "unknown title"}) at ${resolvedCompany || "their company"}\n\nContext:\n${enrichedContext}${transcriptContext}\n\nProvide a subject line and email body. Format as:\nSUBJECT: [subject line]\n\n[email body]` },
+        { role: "system", content: `You are an expert B2B sales email writer for HackerEarth, a developer assessment and hiring platform.${styleBlock}\n\n${HACKEREARTH_SYSTEM_PROMPT}\n\nWrite professional, concise, high-converting sales emails. Always output in this exact format:\nSUBJECT: [subject line]\n\n[email body]` },
+        { role: "user", content: `Write an email with the following intent:\n${input.prompt}${meetingContextBlock}` },
       ],
     });
 
@@ -477,15 +493,178 @@ const emailsRouter = router({
     const body = content.replace(/^SUBJECT:\s*.+\n\n?/m, "").trim();
 
     const id = await createGeneratedEmail({
-      meetingId: input.meetingId, prospectId: input.prospectId,
-      emailType: input.emailType, subject, body, context: input.context,
-      recipientName: input.recipientName, recipientTitle: input.recipientTitle,
-      recipientCompany: input.recipientCompany,
+      meetingId: input.meetingId,
+      emailType: "custom",
+      subject,
+      body,
+      context: input.prompt,
     });
 
     return { id, subject, body };
   }),
+
+  // User accepts an email (optionally with edits) — triggers style learning
+  accept: publicProcedure.input(z.object({
+    id: z.number(),
+    finalText: z.string().optional(), // The final email text the user actually sent (may differ from generated)
+  })).mutation(async ({ input }) => {
+    await acceptGeneratedEmail(input.id, input.finalText);
+
+    // Async style learning: fetch last 10 accepted emails and update style profile
+    const accepted = await getAcceptedEmails(10);
+    if (accepted.length >= 2) {
+      const samples = accepted.map((e, i) => `--- Email ${i + 1} ---\nSubject: ${e.subject}\n${e.userEdits || e.body}`).join("\n\n");
+      const learnResponse = await invokeLLM({
+        messages: [
+          { role: "system", content: "You are analyzing a sales rep's accepted emails to extract their writing style preferences. Return a JSON object with: tone (string), avgLength (string: e.g. 'concise under 150 words'), openingStyle (string), closingStyle (string), preferredPhrases (array of strings), avoidPhrases (array of strings), structureNotes (string), learnedAt (ISO timestamp string), samplesAnalyzed (number)." },
+          { role: "user", content: `Analyze these emails the rep accepted/used and extract their style preferences:\n\n${samples}` },
+        ],
+        response_format: {
+          type: "json_schema",
+          json_schema: {
+            name: "email_style_profile",
+            strict: true,
+            schema: {
+              type: "object",
+              properties: {
+                tone: { type: "string" },
+                avgLength: { type: "string" },
+                openingStyle: { type: "string" },
+                closingStyle: { type: "string" },
+                preferredPhrases: { type: "array", items: { type: "string" } },
+                avoidPhrases: { type: "array", items: { type: "string" } },
+                structureNotes: { type: "string" },
+                learnedAt: { type: "string" },
+                samplesAnalyzed: { type: "number" },
+              },
+              required: ["tone", "avgLength", "openingStyle", "closingStyle", "preferredPhrases", "avoidPhrases", "structureNotes", "learnedAt", "samplesAnalyzed"],
+              additionalProperties: false,
+            },
+          },
+        },
+      });
+      try {
+        const raw = learnResponse.choices?.[0]?.message?.content ?? "{}";
+        const profile = JSON.parse(typeof raw === "string" ? raw : "{}");
+        await updateEmailStyleProfile(profile);
+      } catch { /* ignore parse errors */ }
+    }
+
+    return { success: true };
+  }),
+
+  // Get the current learned style profile
+  styleProfile: publicProcedure.query(() => getEmailStyleProfile()),
+
   delete: publicProcedure.input(z.object({ id: z.number() })).mutation(async ({ input }) => { await deleteGeneratedEmail(input.id); return { success: true }; }),
+});
+
+// ─── Accounts Router ──────────────────────────────────────────────────────────
+const accountsRouter = router({
+  list: publicProcedure.query(() => getAllAccounts()),
+  get: publicProcedure.input(z.object({ id: z.number() })).query(({ input }) => getAccountById(input.id)),
+  create: publicProcedure.input(z.object({ name: z.string(), industry: z.string().optional(), domain: z.string().optional() })).mutation(async ({ input }) => {
+    const id = await createAccount({ name: input.name, normalizedName: normalizeAccountName(input.name), industry: input.industry, domain: input.domain });
+    return { id };
+  }),
+  linkMeeting: publicProcedure.input(z.object({ meetingId: z.number(), accountId: z.number() })).mutation(async ({ input }) => {
+    await updateMeeting(input.meetingId, { accountId: input.accountId });
+    return { success: true };
+  }),
+  meetings: publicProcedure.input(z.object({ accountId: z.number() })).query(({ input }) => getMeetingsByAccountId(input.accountId)),
+  findMatch: publicProcedure.input(z.object({ companyName: z.string() })).query(({ input }) => findMatchingAccount(input.companyName)),
+});
+
+// ─── Deal Summary Router ──────────────────────────────────────────────────────
+const dealSummaryRouter = router({
+  get: publicProcedure.input(z.object({ accountId: z.number() })).query(({ input }) => getDealSummaryByAccountId(input.accountId)),
+  list: publicProcedure.query(() => getAllDealSummaries()),
+  generate: publicProcedure.input(z.object({ accountId: z.number() })).mutation(async ({ input }) => {
+      const [account, accountMeetings] = await Promise.all([
+        getAccountById(input.accountId),
+        getMeetingsByAccountId(input.accountId),
+      ]);
+      if (!account) throw new Error("Account not found");
+      if (accountMeetings.length === 0) throw new Error("No meetings found for this account");
+
+      // Gather all analysis data for each meeting
+      const meetingData = await Promise.all(
+        accountMeetings.map(async (m) => {
+          const [transcript, analysis, spiced, meddpicc] = await Promise.all([
+            getTranscriptByMeetingId(m.id),
+            getAiAnalysisByMeetingId(m.id),
+            getSpicedReportByMeetingId(m.id),
+            getMeddpiccReportByMeetingId(m.id),
+          ]);
+          return { meeting: m, transcript, analysis, spiced, meddpicc };
+        })
+      );
+
+      // Build a rich context for the LLM
+      const callSummaries = meetingData.map((md, i) => {
+        const parts = [`Call ${i + 1}: ${md.meeting.title} (${new Date(Number(md.meeting.createdAt)).toLocaleDateString()})`];
+        if (md.meeting.dealStage) parts.push(`  Stage: ${md.meeting.dealStage}`);
+        if (md.analysis?.summary) parts.push(`  Summary: ${md.analysis.summary}`);
+        type AI = { text: string }[];
+        const toText = (v: unknown) => Array.isArray(v) ? (v as AI).map(i => i.text).filter(Boolean).join("; ") : "";
+        if (md.analysis) {
+          const pp = toText(md.analysis.painPoints); if (pp) parts.push(`  Pain Points: ${pp}`);
+          const bs = toText(md.analysis.buyingSignals); if (bs) parts.push(`  Buying Signals: ${bs}`);
+          const ob = toText(md.analysis.objections); if (ob) parts.push(`  Objections: ${ob}`);
+          const ns = toText(md.analysis.nextSteps); if (ns) parts.push(`  Next Steps: ${ns}`);
+          if (md.analysis.dealScore) parts.push(`  Deal Score: ${md.analysis.dealScore}/10`);
+        }
+        return parts.join("\n");
+      }).join("\n\n");
+
+      const response = await invokeLLM({
+        messages: [
+          { role: "system", content: `You are a senior sales analyst. Analyze multiple sales calls with the same account and produce a consolidated deal summary. Return a JSON object with these fields: narrative (string, 2-3 paragraph deal story), consolidatedMeddpicc (object with keys: metrics, economicBuyer, decisionCriteria, decisionProcess, identifyPain, champion, competition, each a string), consolidatedSpiced (object with keys: situation, pain, impact, criticalEvent, decision, each a string), healthScore (number 1-10), healthTrend (array of objects with callIndex and score), risks (array of strings), momentumSignals (array of strings), recommendedNextAction (string).` },
+          { role: "user", content: `Account: ${account.name}\nTotal Calls: ${accountMeetings.length}\n\n${callSummaries}` },
+        ],
+        response_format: {
+          type: "json_schema",
+          json_schema: {
+            name: "deal_summary",
+            strict: true,
+            schema: {
+              type: "object",
+              properties: {
+                narrative: { type: "string" },
+                consolidatedMeddpicc: { type: "object", properties: { metrics: { type: "string" }, economicBuyer: { type: "string" }, decisionCriteria: { type: "string" }, decisionProcess: { type: "string" }, identifyPain: { type: "string" }, champion: { type: "string" }, competition: { type: "string" } }, required: ["metrics","economicBuyer","decisionCriteria","decisionProcess","identifyPain","champion","competition"], additionalProperties: false },
+                consolidatedSpiced: { type: "object", properties: { situation: { type: "string" }, pain: { type: "string" }, impact: { type: "string" }, criticalEvent: { type: "string" }, decision: { type: "string" } }, required: ["situation","pain","impact","criticalEvent","decision"], additionalProperties: false },
+                healthScore: { type: "number" },
+                healthTrend: { type: "array", items: { type: "object", properties: { callIndex: { type: "number" }, score: { type: "number" } }, required: ["callIndex","score"], additionalProperties: false } },
+                risks: { type: "array", items: { type: "string" } },
+                momentumSignals: { type: "array", items: { type: "string" } },
+                recommendedNextAction: { type: "string" },
+              },
+              required: ["narrative","consolidatedMeddpicc","consolidatedSpiced","healthScore","healthTrend","risks","momentumSignals","recommendedNextAction"],
+              additionalProperties: false,
+            },
+          },
+        },
+      });
+
+      const raw = response.choices?.[0]?.message?.content ?? "{}";
+      const summary = JSON.parse(typeof raw === "string" ? raw : "{}");
+
+      await upsertDealSummary({
+        accountId: input.accountId,
+        accountName: account.name,
+        dealNarrative: summary.narrative,
+        consolidatedMeddpicc: summary.consolidatedMeddpicc,
+        consolidatedSpiced: summary.consolidatedSpiced,
+        dealHealthScore: summary.healthScore,
+        dealHealthTrend: summary.healthTrend,
+        keyRisks: summary.risks,
+        momentumSignals: summary.momentumSignals,
+        recommendedNextAction: summary.recommendedNextAction,
+        callCount: accountMeetings.length,
+      });
+
+      return { success: true, ...summary, accountName: account.name, callCount: accountMeetings.length };
+    }),
 });
 
 // ─── Deck Generator Router ────────────────────────────────────────────────────
@@ -621,6 +800,8 @@ export const appRouter = router({
   actionItems: actionItemsRouter,
   prospects: prospectsRouter,
   emails: emailsRouter,
+  accounts: accountsRouter,
+  dealSummary: dealSummaryRouter,
   decks: decksRouter,
   battlecards: battlecardsRouter,
   objections: objectionsRouter,

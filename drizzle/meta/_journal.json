@@ -43,6 +43,13 @@
       "when": 1776244738035,
       "tag": "0005_groovy_gladiator",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "5",
+      "when": 1776259770415,
+      "tag": "0006_bent_shocker",
+      "breakpoints": true
     }
   ]
 }

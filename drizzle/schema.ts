@@ -26,9 +26,28 @@ export const users = mysqlTable("users", {
 export type User = typeof users.$inferSelect;
 export type InsertUser = typeof users.$inferInsert;
 
+// ─── Accounts (deduplicated company/org records) ──────────────────────────────
+export const accounts = mysqlTable("accounts", {
+  id: int("id").autoincrement().primaryKey(),
+  name: varchar("name", { length: 255 }).notNull(),
+  normalizedName: varchar("normalizedName", { length: 255 }).notNull(), // lowercase, stripped for fuzzy match
+  domain: varchar("domain", { length: 255 }),
+  industry: varchar("industry", { length: 255 }),
+  companySize: varchar("companySize", { length: 128 }),
+  primaryContactName: varchar("primaryContactName", { length: 255 }),
+  primaryContactTitle: varchar("primaryContactTitle", { length: 255 }),
+  notes: text("notes"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type Account = typeof accounts.$inferSelect;
+export type InsertAccount = typeof accounts.$inferInsert;
+
 // ─── Meetings ────────────────────────────────────────────────────────────────
 export const meetings = mysqlTable("meetings", {
   id: int("id").autoincrement().primaryKey(),
+  accountId: int("accountId"), // FK to accounts table (nullable for backward compat)
   title: varchar("title", { length: 255 }).notNull(),
   platform: mysqlEnum("platform", ["zoom", "google_meet", "teams", "slack", "webex", "other"]).notNull().default("zoom"),
   meetingUrl: text("meetingUrl"),
@@ -36,7 +55,9 @@ export const meetings = mysqlTable("meetings", {
   status: mysqlEnum("status", ["scheduled", "joining", "recording", "processing", "completed", "failed"]).notNull().default("scheduled"),
   accountName: varchar("accountName", { length: 255 }),
   contactName: varchar("contactName", { length: 255 }),
+  contactTitle: varchar("contactTitle", { length: 255 }),
   dealStage: varchar("dealStage", { length: 128 }),
+  dealValue: varchar("dealValue", { length: 128 }),
   participants: json("participants").$type<string[]>(),
   scheduledAt: timestamp("scheduledAt"),
   startedAt: timestamp("startedAt"),
@@ -220,27 +241,40 @@ export const notes = mysqlTable("notes", {
 
 export type Note = typeof notes.$inferSelect;
 export type InsertNote = typeof notes.$inferInsert;
+
 // ─── App Settings ─────────────────────────────────────────────────────────────
 export const appSettings = mysqlTable("app_settings", {
   id: int("id").autoincrement().primaryKey(),
-  // Local AI configuration (privacy-first — zero external data)
   ollamaEndpoint: varchar("ollamaEndpoint", { length: 512 }).default("http://localhost:11434"),
   ollamaModel: varchar("ollamaModel", { length: 128 }).default("llama3.1:8b"),
   whisperEndpoint: varchar("whisperEndpoint", { length: 512 }).default("http://localhost:8001"),
-  // Legacy / optional
   botName: varchar("botName", { length: 255 }).default("SalesLens"),
+  // Email style profile — learned from accepted emails
+  emailStyleProfile: json("emailStyleProfile").$type<EmailStyleProfile | null>(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 });
 export type AppSettings = typeof appSettings.$inferSelect;
 export type InsertAppSettings = typeof appSettings.$inferInsert;
 
+export type EmailStyleProfile = {
+  tone: string; // e.g. "conversational but professional"
+  avgLength: string; // e.g. "concise (under 150 words)"
+  openingStyle: string; // e.g. "direct, no pleasantries"
+  closingStyle: string; // e.g. "single clear CTA"
+  avoidPhrases: string[]; // phrases the user consistently removes
+  preferredPhrases: string[]; // phrases the user consistently keeps/adds
+  structureNotes: string; // e.g. "always uses bullet points for value props"
+  learnedAt: string; // ISO timestamp of last learning pass
+  samplesAnalyzed: number;
+};
+
 // ─── Pitch Coaching ───────────────────────────────────────────────────────────
 export const pitchCoaching = mysqlTable("pitch_coaching", {
   id: int("id").autoincrement().primaryKey(),
   meetingId: int("meetingId").notNull().unique(),
   overallScore: float("overallScore"),
-  talkTimeRatio: float("talkTimeRatio"), // rep's % of talk time
+  talkTimeRatio: float("talkTimeRatio"),
   discoveryScore: float("discoveryScore"),
   objectionScore: float("objectionScore"),
   valueScore: float("valueScore"),
@@ -252,7 +286,7 @@ export const pitchCoaching = mysqlTable("pitch_coaching", {
   missedOpportunities: json("missedOpportunities").$type<string[]>(),
   competitorsMentioned: json("competitorsMentioned").$type<string[]>(),
   battlecardUsed: boolean("battlecardUsed").default(false),
-  meddpiccCoverage: float("meddpiccCoverage"), // % of MEDDPICC fields addressed
+  meddpiccCoverage: float("meddpiccCoverage"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 });
@@ -281,11 +315,11 @@ export const preCallIntelligence = mysqlTable("pre_call_intelligence", {
   fundingStage: text("fundingStage"),
   recentNews: json("recentNews").$type<string[]>(),
   techStack: json("techStack").$type<string[]>(),
-  currentTools: json("currentTools").$type<string[]>(), // known assessment/hiring tools they use
+  currentTools: json("currentTools").$type<string[]>(),
   triggerEvents: json("triggerEvents").$type<TriggerEvent[]>(),
   prepBullets: json("prepBullets").$type<PrepBullet[]>(),
   suggestedOpening: text("suggestedOpening"),
-  leadWithProduct: text("leadWithProduct"), // which HE product to lead with
+  leadWithProduct: text("leadWithProduct"),
   buyerPersona: text("buyerPersona"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
@@ -296,20 +330,20 @@ export type InsertPreCallIntelligence = typeof preCallIntelligence.$inferInsert;
 
 export type TriggerEvent = {
   event: string;
-  relevance: string; // why this matters for HackerEarth pitch
+  relevance: string;
   urgency: "low" | "medium" | "high";
 };
 
 export type PrepBullet = {
   point: string;
-  why: string; // context/rationale
+  why: string;
   source?: string;
 };
 
 // ─── Prospects (Lead Generation Queue) ───────────────────────────────────────
 export const prospects = mysqlTable("prospects", {
   id: int("id").autoincrement().primaryKey(),
-  sourceCompanyName: varchar("sourceCompanyName", { length: 255 }), // company from transcript that led to this prospect
+  sourceCompanyName: varchar("sourceCompanyName", { length: 255 }),
   prospectCompanyName: varchar("prospectCompanyName", { length: 255 }).notNull(),
   prospectDomain: varchar("prospectDomain", { length: 255 }),
   industry: text("industry"),
@@ -318,10 +352,10 @@ export const prospects = mysqlTable("prospects", {
   contactName: varchar("contactName", { length: 255 }),
   contactTitle: varchar("contactTitle", { length: 255 }),
   contactLinkedin: varchar("contactLinkedin", { length: 512 }),
-  fitReason: text("fitReason"), // why this company is a good HE prospect
-  outreachAngle: text("outreachAngle"), // specific HE product angle for this prospect
-  triggerEvent: text("triggerEvent"), // what makes this timely
-  suggestedProduct: varchar("suggestedProduct", { length: 128 }), // HE product to lead with
+  fitReason: text("fitReason"),
+  outreachAngle: text("outreachAngle"),
+  triggerEvent: text("triggerEvent"),
+  suggestedProduct: varchar("suggestedProduct", { length: 128 }),
   status: mysqlEnum("status", ["to_contact", "contacted", "in_progress", "converted", "not_a_fit"]).notNull().default("to_contact"),
   notes: text("notes"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
@@ -334,17 +368,78 @@ export type InsertProspect = typeof prospects.$inferInsert;
 // ─── Generated Emails ─────────────────────────────────────────────────────────
 export const generatedEmails = mysqlTable("generated_emails", {
   id: int("id").autoincrement().primaryKey(),
-  meetingId: int("meetingId"), // optional — can generate email without a meeting
-  prospectId: int("prospectId"), // optional — can link to a prospect
+  meetingId: int("meetingId"),
+  prospectId: int("prospectId"),
   emailType: mysqlEnum("emailType", ["follow_up", "cold_outreach", "objection_response", "demo_follow_up", "proposal_follow_up", "custom"]).notNull().default("follow_up"),
   subject: varchar("subject", { length: 512 }),
   body: text("body"),
-  context: text("context"), // what the user told the AI about this email
+  context: text("context"), // user's free-form prompt / intent
   recipientName: varchar("recipientName", { length: 255 }),
   recipientTitle: varchar("recipientTitle", { length: 255 }),
   recipientCompany: varchar("recipientCompany", { length: 255 }),
+  // Feedback / learning columns
+  accepted: boolean("accepted").default(false),       // did user click "Accept & Use"?
+  userEdits: text("userEdits"),                       // final version after user edits (if any)
+  styleNotes: text("styleNotes"),                     // AI-extracted style observations from this email
   createdAt: timestamp("createdAt").defaultNow().notNull(),
 });
 
 export type GeneratedEmail = typeof generatedEmails.$inferSelect;
 export type InsertGeneratedEmail = typeof generatedEmails.$inferInsert;
+
+// ─── Deal Summaries (multi-call consolidation per account) ────────────────────
+export const dealSummaries = mysqlTable("deal_summaries", {
+  id: int("id").autoincrement().primaryKey(),
+  accountId: int("accountId").notNull(),
+  accountName: varchar("accountName", { length: 255 }).notNull(),
+  // Consolidated MEDDPICC across all calls
+  consolidatedMeddpicc: json("consolidatedMeddpicc").$type<ConsolidatedMeddpicc | null>(),
+  // Consolidated SPICED across all calls
+  consolidatedSpiced: json("consolidatedSpiced").$type<ConsolidatedSpiced | null>(),
+  // Deal health over time
+  dealHealthScore: float("dealHealthScore"),
+  dealHealthTrend: json("dealHealthTrend").$type<DealHealthPoint[]>(),
+  // Narrative summary of the full deal thread
+  dealNarrative: text("dealNarrative"),
+  // Key risks and momentum signals
+  keyRisks: json("keyRisks").$type<string[]>(),
+  momentumSignals: json("momentumSignals").$type<string[]>(),
+  recommendedNextAction: text("recommendedNextAction"),
+  callCount: int("callCount").default(0),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type DealSummary = typeof dealSummaries.$inferSelect;
+export type InsertDealSummary = typeof dealSummaries.$inferInsert;
+
+export type ConsolidatedMeddpicc = {
+  metrics: string; metricsConfidence: number;
+  economicBuyer: string; economicBuyerConfidence: number;
+  decisionCriteria: string; decisionCriteriaConfidence: number;
+  decisionProcess: string; decisionProcessConfidence: number;
+  paperProcess: string; paperProcessConfidence: number;
+  identifyPain: string; identifyPainConfidence: number;
+  champion: string; championConfidence: number;
+  competition: string; competitionConfidence: number;
+  overallCompleteness: number;
+  lastUpdatedFromCall: number; // meetingId
+};
+
+export type ConsolidatedSpiced = {
+  situation: string; situationConfidence: number;
+  pain: string; painConfidence: number;
+  impact: string; impactConfidence: number;
+  criticalEvent: string; criticalEventConfidence: number;
+  decision: string; decisionConfidence: number;
+  overallCompleteness: number;
+  lastUpdatedFromCall: number;
+};
+
+export type DealHealthPoint = {
+  meetingId: number;
+  meetingTitle: string;
+  score: number;
+  date: string; // ISO date string
+  sentiment: string;
+};

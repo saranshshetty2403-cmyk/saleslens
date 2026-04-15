@@ -90,3 +90,33 @@
 - [x] Analysis: accordion expand showing AI insights inline
 - [x] Notes: accordion expand showing note content inline
 - [x] DealTimeline: accordion expand showing meeting details inline
+
+## Feature: Smart Account Auto-Linking
+- [ ] Add `accountId` FK column to meetings table (links to new accounts table)
+- [ ] Create `accounts` table: id, name, domain, industry, createdAt
+- [ ] Add `emailStyleProfile` table: stores learned email preferences per user
+- [ ] Add `emailFeedback` column to generatedEmails: accepted boolean, userEdits text
+- [ ] Server: add `meetings.extractIdentity` procedure — LLM extracts company+contact from transcript
+- [ ] Server: add `meetings.matchAccount` procedure — fuzzy match extracted identity against existing accounts
+- [ ] Server: add `accounts.list` and `accounts.create` procedures
+- [ ] Frontend: after transcript analysis, show identity confirmation dialog if confidence < 0.85
+- [ ] Frontend: confirmation dialog shows extracted name + dropdown of existing accounts + "New Account"
+
+## Feature: Deal Summary (Multi-Call Consolidation)
+- [ ] Add `dealSummaries` table: accountId, consolidatedMeddpicc json, consolidatedSpiced json, dealHealthScore, trend json, updatedAt
+- [ ] Server: add `dealSummary.generate` procedure — fetches all meetings for account, runs LLM consolidation
+- [ ] Server: add `dealSummary.get` procedure — returns latest summary for an account
+- [ ] Frontend: new Deal Summary page showing per-account consolidated view
+- [ ] Frontend: deal health score trend chart (sparkline per account)
+- [ ] Frontend: side-by-side call comparison within Deal Summary
+
+## Feature: Email Generator Redesign
+- [ ] Remove recipient/company/context pre-fill from EmailGenerator
+- [ ] Add free-form "What do you want to say?" textarea as primary input
+- [ ] Add optional meeting context selector (collapsed by default)
+- [ ] After generation: show "Accept & Save" / "Regenerate" / "Edit then Save" buttons
+- [ ] Save accepted email with `accepted=true` flag in DB
+- [ ] Save user edits as `userEdits` text in DB
+- [ ] Server: add `emailStyle.learn` procedure — analyzes accepted emails to build style profile
+- [ ] Server: add `emailStyle.getProfile` procedure — returns current learned style preferences
+- [ ] Inject style profile into email generation prompt automatically

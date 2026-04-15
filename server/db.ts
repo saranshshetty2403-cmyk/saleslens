@@ -11,6 +11,8 @@ import {
   transcripts,
   users,
   appSettings,
+  accounts,
+  dealSummaries,
   type InsertActionItem,
   type InsertAiAnalysis,
   type InsertMeddpiccReport,
@@ -18,6 +20,9 @@ import {
   type InsertNote,
   type InsertSpicedReport,
   type InsertTranscript,
+  type InsertAccount,
+  type InsertDealSummary,
+  type EmailStyleProfile,
 } from "../drizzle/schema";
 import * as pg from "./db.pg";
 
@@ -458,4 +463,184 @@ export async function deleteGeneratedEmail(id: number) {
   const db = await getDb();
   if (!db) throw new Error("DB not available");
   await db.delete(generatedEmails).where(eq(generatedEmails.id, id));
+}
+
+// ─── Accounts ─────────────────────────────────────────────────────────────────
+/** Normalize a company name for fuzzy matching: lowercase, strip punctuation/spaces */
+export function normalizeAccountName(name: string): string {
+  return name.toLowerCase().replace(/[^a-z0-9]/g, "");
+}
+
+/** Simple Jaro-Winkler-ish similarity: returns 0-1 */
+function similarity(a: string, b: string): number {
+  if (a === b) return 1;
+  if (a.length === 0 || b.length === 0) return 0;
+  // Check if one contains the other
+  if (a.includes(b) || b.includes(a)) return 0.9;
+  // Levenshtein distance ratio
+  const longer = a.length > b.length ? a : b;
+  const shorter = a.length > b.length ? b : a;
+  const editDistance = (s1: string, s2: string): number => {
+    const dp = Array.from({ length: s2.length + 1 }, (_, i) => i);
+    for (let i = 1; i <= s1.length; i++) {
+      let prev = i;
+      for (let j = 1; j <= s2.length; j++) {
+        const val = s1[i - 1] === s2[j - 1] ? dp[j - 1] : Math.min(dp[j - 1], dp[j], prev) + 1;
+        dp[j - 1] = prev;
+        prev = val;
+      }
+      dp[s2.length] = prev;
+    }
+    return dp[s2.length];
+  };
+  const dist = editDistance(shorter, longer);
+  return (longer.length - dist) / longer.length;
+}
+
+export async function getAllAccounts() {
+  if (isPg()) return [];
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(accounts).orderBy(desc(accounts.updatedAt));
+}
+
+export async function getAccountById(id: number) {
+  if (isPg()) return undefined;
+  const db = await getDb();
+  if (!db) return undefined;
+  const result = await db.select().from(accounts).where(eq(accounts.id, id)).limit(1);
+  return result[0];
+}
+
+export async function createAccount(data: InsertAccount) {
+  if (isPg()) return 0;
+  const db = await getDb();
+  if (!db) throw new Error("DB not available");
+  const result = await db.insert(accounts).values(data);
+  return result[0].insertId as number;
+}
+
+export async function updateAccount(id: number, data: Partial<InsertAccount>) {
+  if (isPg()) return;
+  const db = await getDb();
+  if (!db) throw new Error("DB not available");
+  await db.update(accounts).set(data).where(eq(accounts.id, id));
+}
+
+/**
+ * Find the best matching account for a given company name.
+ * Returns { account, confidence } where confidence is 0-1.
+ * confidence >= 0.85 → auto-link; < 0.85 → ask user.
+ */
+export async function findMatchingAccount(companyName: string): Promise<{
+  account: typeof accounts.$inferSelect | null;
+  confidence: number;
+  candidates: Array<{ account: typeof accounts.$inferSelect; confidence: number }>;
+}> {
+  if (isPg()) return { account: null, confidence: 0, candidates: [] };
+  const db = await getDb();
+  if (!db) return { account: null, confidence: 0, candidates: [] };
+
+  const allAccounts = await db.select().from(accounts);
+  if (allAccounts.length === 0) return { account: null, confidence: 0, candidates: [] };
+
+  const normalized = normalizeAccountName(companyName);
+  const scored = allAccounts.map((acc) => ({
+    account: acc,
+    confidence: similarity(normalized, acc.normalizedName),
+  })).sort((a, b) => b.confidence - a.confidence);
+
+  const best = scored[0];
+  const candidates = scored.filter((s) => s.confidence >= 0.5).slice(0, 5);
+
+  return {
+    account: best && best.confidence >= 0.85 ? best.account : null,
+    confidence: best?.confidence ?? 0,
+    candidates,
+  };
+}
+
+export async function getMeetingsByAccountId(accountId: number) {
+  if (isPg()) return [];
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(meetings).where(eq(meetings.accountId, accountId)).orderBy(desc(meetings.createdAt));
+}
+
+// ─── Deal Summaries ───────────────────────────────────────────────────────────
+export async function getDealSummaryByAccountId(accountId: number) {
+  if (isPg()) return undefined;
+  const db = await getDb();
+  if (!db) return undefined;
+  const result = await db.select().from(dealSummaries).where(eq(dealSummaries.accountId, accountId)).limit(1);
+  return result[0];
+}
+
+export async function getAllDealSummaries() {
+  if (isPg()) return [];
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(dealSummaries).orderBy(desc(dealSummaries.updatedAt));
+}
+
+export async function upsertDealSummary(data: InsertDealSummary) {
+  if (isPg()) return 0;
+  const db = await getDb();
+  if (!db) throw new Error("DB not available");
+  const existing = await db.select().from(dealSummaries).where(eq(dealSummaries.accountId, data.accountId)).limit(1);
+  if (existing.length > 0) {
+    const { accountId: _a, id: _i, createdAt: _c, ...updateFields } = data as Record<string, unknown>;
+    await db.update(dealSummaries).set(updateFields as Partial<InsertDealSummary>).where(eq(dealSummaries.accountId, data.accountId));
+    return existing[0].id;
+  }
+  const result = await db.insert(dealSummaries).values(data);
+  return result[0].insertId as number;
+}
+
+// ─── Email Feedback / Style Learning ─────────────────────────────────────────
+export async function acceptGeneratedEmail(id: number, userEdits?: string) {
+  if (isPg()) return;
+  const db = await getDb();
+  if (!db) throw new Error("DB not available");
+  await db.update(generatedEmails).set({ accepted: true, userEdits: userEdits ?? null }).where(eq(generatedEmails.id, id));
+}
+
+export async function getAcceptedEmails(limit = 20) {
+  if (isPg()) return [];
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(generatedEmails).where(eq(generatedEmails.accepted, true)).orderBy(desc(generatedEmails.createdAt)).limit(limit);
+}
+
+export async function updateEmailStyleProfile(profile: EmailStyleProfile) {
+  if (isPg()) return;
+  const db = await getDb();
+  if (!db) throw new Error("DB not available");
+  const existing = await db.select().from(appSettings).limit(1);
+  if (existing.length === 0) {
+    await db.insert(appSettings).values({
+      ollamaEndpoint: "http://localhost:11434",
+      ollamaModel: "llama3.1:8b",
+      whisperEndpoint: "http://localhost:8001",
+      botName: "SalesLens",
+      emailStyleProfile: profile,
+    });
+  } else {
+    await db.update(appSettings).set({ emailStyleProfile: profile }).where(eq(appSettings.id, existing[0].id));
+  }
+}
+
+export async function getEmailStyleProfile(): Promise<EmailStyleProfile | null> {
+  if (isPg()) return null;
+  const db = await getDb();
+  if (!db) return null;
+  const rows = await db.select({ emailStyleProfile: appSettings.emailStyleProfile }).from(appSettings).limit(1);
+  return (rows[0]?.emailStyleProfile as EmailStyleProfile | null) ?? null;
+}
+
+export async function updateGeneratedEmailStyleNotes(id: number, styleNotes: string) {
+  if (isPg()) return;
+  const db = await getDb();
+  if (!db) throw new Error("DB not available");
+  await db.update(generatedEmails).set({ styleNotes }).where(eq(generatedEmails.id, id));
 }
