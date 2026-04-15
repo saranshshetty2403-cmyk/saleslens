@@ -82,3 +82,11 @@
 - [ ] Auto-populate recipient name, company, deal stage from meeting data
 - [ ] Auto-populate context field with: product being sold, pain points, objections, buying signals, deal stage, and key discussion points from transcript
 - [ ] Pass full enriched context to the email generation API so emails are specific and relevant
+- [ ] Fix MEDDPICC module: clicking a report should expand inline (accordion), not navigate to another page
+
+## Module Expand-in-Place Fixes
+- [x] MEDDPICC Reports: accordion expand instead of navigate
+- [x] SPICED Reports: accordion expand instead of navigate
+- [x] Analysis: accordion expand showing AI insights inline
+- [x] Notes: accordion expand showing note content inline
+- [x] DealTimeline: accordion expand showing meeting details inline

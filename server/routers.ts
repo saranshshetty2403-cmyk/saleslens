@@ -80,6 +80,9 @@ const transcriptsRouter = router({
 
 // ─── Core Analyze Router (THE HERO ENDPOINT) ─────────────────────────────────
 const analyzeRouter = router({
+  getByMeeting: publicProcedure.input(z.object({ meetingId: z.number() })).query(async ({ input }) => {
+    return getAiAnalysisByMeetingId(input.meetingId);
+  }),
   // Single endpoint: transcript in → everything out
   full: publicProcedure.input(z.object({
     meetingId: z.number(),

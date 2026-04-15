@@ -1,11 +1,14 @@
 // @ts-nocheck
 import { tsToDate } from "@/lib/dateUtils";
 import { trpc } from "@/lib/trpc";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { TrendingUp, ChevronRight } from "lucide-react";
+import { TrendingUp, ChevronDown, ChevronUp, ExternalLink } from "lucide-react";
 import { useLocation } from "wouter";
 import { formatDistanceToNow } from "date-fns";
+import { useState } from "react";
+import { Button } from "@/components/ui/button";
+import { Progress } from "@/components/ui/progress";
 
 const SPICED_FIELDS = ["situation", "pain", "impact", "criticalEvent", "decision"] as const;
 const LABELS: Record<string, string> = {
@@ -59,68 +62,85 @@ export default function SpicedReports() {
 
 function SpicedCard({ meeting }: { meeting: { id: number; title: string; accountName?: string | null; createdAt: Date } }) {
   const { data: spiced } = trpc.spiced.get.useQuery({ meetingId: meeting.id });
+  const [expanded, setExpanded] = useState(false);
   const [, navigate] = useLocation();
-
-  const handleClick = () => {
-    navigate(`/meetings/${meeting.id}?tab=spiced`);
-  };
 
   const filledCount = spiced
     ? SPICED_FIELDS.filter((f) => !!(spiced as Record<string, unknown>)[f]).length
     : 0;
+  const completeness = spiced ? Math.round((filledCount / 5) * 100) : 0;
+  const cc = completeness >= 80 ? "text-emerald-400" : completeness >= 40 ? "text-amber-400" : "text-red-400";
 
   return (
-    <Card
-      className="bg-card border-border hover:border-primary/30 hover:bg-accent/10 transition-all cursor-pointer"
-      onClick={handleClick}
-    >
-      <CardHeader className="pb-3">
+    <Card className="bg-card border-border transition-all overflow-hidden">
+      <CardHeader
+        className="pb-3 cursor-pointer select-none hover:bg-accent/10 transition-colors"
+        onClick={() => setExpanded((v) => !v)}
+      >
         <div className="flex items-center justify-between gap-3">
-          <CardTitle className="text-sm font-semibold text-foreground flex items-center gap-2">
-            <TrendingUp className="w-3.5 h-3.5 text-primary" />
-            {meeting.title}
-          </CardTitle>
+          <div className="flex items-center gap-2 min-w-0">
+            <TrendingUp className="w-3.5 h-3.5 text-primary shrink-0" />
+            <div className="min-w-0">
+              <p className="text-sm font-semibold text-foreground truncate">{meeting.title}</p>
+              {meeting.accountName && <p className="text-xs text-muted-foreground">{meeting.accountName}</p>}
+            </div>
+          </div>
           <div className="flex items-center gap-2 shrink-0">
             {spiced ? (
-              <Badge variant="outline" className="text-[10px] text-emerald-400 border-emerald-400/30">
-                {filledCount}/5 fields
-              </Badge>
+              <>
+                <span className={`text-xs font-semibold ${cc}`}>{filledCount}/5</span>
+                <Badge variant="outline" className={`text-[10px] ${cc} border-current/30`}>{completeness}% complete</Badge>
+              </>
             ) : (
-              <Badge variant="outline" className="text-[10px] text-muted-foreground">
-                Not generated
-              </Badge>
+              <Badge variant="outline" className="text-[10px] text-muted-foreground">Not generated</Badge>
             )}
-            <span className="text-xs text-muted-foreground">
+            <span className="text-xs text-muted-foreground hidden sm:block">
               {formatDistanceToNow(tsToDate(meeting.createdAt), { addSuffix: true })}
             </span>
-            <ChevronRight className="w-3.5 h-3.5 text-muted-foreground" />
+            {expanded ? <ChevronUp className="w-4 h-4 text-muted-foreground" /> : <ChevronDown className="w-4 h-4 text-muted-foreground" />}
           </div>
         </div>
-        {meeting.accountName && (
-          <p className="text-xs text-muted-foreground">{meeting.accountName}</p>
-        )}
+        {spiced && <Progress value={completeness} className="h-1 mt-2" />}
       </CardHeader>
-      <CardContent>
-        {!spiced ? (
-          <p className="text-xs text-muted-foreground italic">No SPICED report generated yet — click to open meeting and generate</p>
-        ) : (
-          <div className="grid grid-cols-1 md:grid-cols-5 gap-2">
-            {SPICED_FIELDS.map((field) => (
-              <div key={field} className="space-y-1">
-                <p className={`text-[10px] font-bold uppercase tracking-wider ${COLORS[field]}`}>
-                  {LABELS[field]}
-                </p>
-                <p className="text-xs text-foreground line-clamp-3 leading-relaxed">
-                  {(spiced as Record<string, unknown>)[field]
-                    ? String((spiced as Record<string, unknown>)[field])
-                    : <span className="text-muted-foreground italic">Not captured</span>
-                  }
-                </p>
+
+      {expanded && (
+        <CardContent className="pt-0 pb-4">
+          {!spiced ? (
+            <div className="flex flex-col items-center gap-3 py-6 text-center">
+              <p className="text-xs text-muted-foreground">No SPICED report generated yet for this meeting.</p>
+              <Button size="sm" variant="outline" className="gap-1.5 text-xs"
+                onClick={(e) => { e.stopPropagation(); navigate(`/meetings/${meeting.id}?tab=spiced`); }}>
+                <ExternalLink className="w-3 h-3" /> Open meeting to generate
+              </Button>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                {SPICED_FIELDS.map((field) => (
+                  <div key={field} className={`rounded-lg border p-3 space-y-1.5 ${{
+                    situation: 'bg-blue-400/10 border-blue-400/20',
+                    pain: 'bg-red-400/10 border-red-400/20',
+                    impact: 'bg-orange-400/10 border-orange-400/20',
+                    criticalEvent: 'bg-yellow-400/10 border-yellow-400/20',
+                    decision: 'bg-purple-400/10 border-purple-400/20',
+                  }[field]}`}>
+                    <p className={`text-[10px] font-bold uppercase tracking-wider ${COLORS[field]}`}>{LABELS[field]}</p>
+                    {(spiced as Record<string, unknown>)[field]
+                      ? <p className="text-xs text-foreground leading-relaxed">{String((spiced as Record<string, unknown>)[field])}</p>
+                      : <p className="text-xs text-muted-foreground italic">Not captured</p>}
+                  </div>
+                ))}
               </div>
-            ))}
-          </div>
-        )}
-      </CardContent>
+              <div className="flex justify-end pt-1">
+                <Button size="sm" variant="ghost" className="gap-1.5 text-xs text-muted-foreground hover:text-foreground"
+                  onClick={(e) => { e.stopPropagation(); navigate(`/meetings/${meeting.id}?tab=spiced`); }}>
+                  <ExternalLink className="w-3 h-3" /> Open full meeting
+                </Button>
+              </div>
+            </div>
+          )}
+        </CardContent>
+      )}
     </Card>
   );
 }
