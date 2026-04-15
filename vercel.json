@@ -5,11 +5,11 @@
   "installCommand": "pnpm install",
   "framework": null,
   "rewrites": [
-    { "source": "/api/(.*)", "destination": "/api/index" },
+    { "source": "/api/(.*)", "destination": "/api/handler" },
     { "source": "/((?!api/).*)", "destination": "/index.html" }
   ],
   "functions": {
-    "api/index.ts": {
+    "api/handler.ts": {
       "maxDuration": 30
     }
   }
