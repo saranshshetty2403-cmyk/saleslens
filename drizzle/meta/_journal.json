@@ -36,6 +36,13 @@
       "when": 1776200772711,
       "tag": "0004_special_shen",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "5",
+      "when": 1776244738035,
+      "tag": "0005_groovy_gladiator",
+      "breakpoints": true
     }
   ]
 }

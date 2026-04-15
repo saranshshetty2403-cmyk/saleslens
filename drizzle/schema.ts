@@ -276,17 +276,17 @@ export const preCallIntelligence = mysqlTable("pre_call_intelligence", {
   meetingId: int("meetingId").notNull().unique(),
   companyName: varchar("companyName", { length: 255 }),
   companyDomain: varchar("companyDomain", { length: 255 }),
-  industry: varchar("industry", { length: 128 }),
-  companySize: varchar("companySize", { length: 64 }),
-  fundingStage: varchar("fundingStage", { length: 64 }),
+  industry: text("industry"),
+  companySize: text("companySize"),
+  fundingStage: text("fundingStage"),
   recentNews: json("recentNews").$type<string[]>(),
   techStack: json("techStack").$type<string[]>(),
   currentTools: json("currentTools").$type<string[]>(), // known assessment/hiring tools they use
   triggerEvents: json("triggerEvents").$type<TriggerEvent[]>(),
   prepBullets: json("prepBullets").$type<PrepBullet[]>(),
   suggestedOpening: text("suggestedOpening"),
-  leadWithProduct: varchar("leadWithProduct", { length: 128 }), // which HE product to lead with
-  buyerPersona: varchar("buyerPersona", { length: 128 }),
+  leadWithProduct: text("leadWithProduct"), // which HE product to lead with
+  buyerPersona: text("buyerPersona"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 });
@@ -312,9 +312,9 @@ export const prospects = mysqlTable("prospects", {
   sourceCompanyName: varchar("sourceCompanyName", { length: 255 }), // company from transcript that led to this prospect
   prospectCompanyName: varchar("prospectCompanyName", { length: 255 }).notNull(),
   prospectDomain: varchar("prospectDomain", { length: 255 }),
-  industry: varchar("industry", { length: 128 }),
-  companySize: varchar("companySize", { length: 64 }),
-  fundingStage: varchar("fundingStage", { length: 64 }),
+  industry: text("industry"),
+  companySize: text("companySize"),
+  fundingStage: text("fundingStage"),
   contactName: varchar("contactName", { length: 255 }),
   contactTitle: varchar("contactTitle", { length: 255 }),
   contactLinkedin: varchar("contactLinkedin", { length: 512 }),
