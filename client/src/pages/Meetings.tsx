@@ -187,7 +187,7 @@ export default function Meetings() {
             <AlertDialog>
               <AlertDialogTrigger asChild>
                 <button
-                  className="absolute right-3 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 transition-opacity p-1.5 rounded-md text-muted-foreground hover:text-red-400 hover:bg-red-500/10"
+                  className="absolute right-3 top-1/2 -translate-y-1/2 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity p-1.5 rounded-md text-muted-foreground hover:text-red-400 hover:bg-red-500/10"
                   onClick={(e) => e.preventDefault()}
                 >
                   <Trash2 className="w-3.5 h-3.5" />

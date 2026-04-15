@@ -167,6 +167,16 @@ export async function pgUpdateMeeting(id: number, data: Record<string, unknown>)
 export async function pgDeleteMeeting(id: number) {
   const sql = getPgSql();
   if (!sql) throw new Error("DB not available");
+  // Delete all related records first, then the meeting itself
+  await sql`DELETE FROM transcripts WHERE "meetingId" = ${id}`;
+  await sql`DELETE FROM ai_analyses WHERE "meetingId" = ${id}`;
+  await sql`DELETE FROM spiced_reports WHERE "meetingId" = ${id}`;
+  await sql`DELETE FROM meddpicc_reports WHERE "meetingId" = ${id}`;
+  await sql`DELETE FROM action_items WHERE "meetingId" = ${id}`;
+  await sql`DELETE FROM notes WHERE "meetingId" = ${id}`;
+  await sql`DELETE FROM pitch_coaching WHERE "meetingId" = ${id}`;
+  await sql`DELETE FROM pre_call_intelligence WHERE "meetingId" = ${id}`;
+  await sql`DELETE FROM generated_emails WHERE "meetingId" = ${id}`;
   await sql`DELETE FROM meetings WHERE id = ${id}`;
 }
 

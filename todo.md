@@ -122,6 +122,6 @@
 - [x] Inject style profile into email generation prompt automatically
 
 ## Feature: Delete Meeting
-- [ ] Add delete button to Meetings list page (per-row, with confirmation)
-- [ ] Add delete button to Meeting Detail page header (with confirmation dialog)
-- [ ] After deletion, redirect to /meetings
+- [x] Add delete button to Meetings list page (per-row, with confirmation)
+- [x] Add delete button to Meeting Detail page header (with confirmation dialog)
+- [x] After deletion, redirect to /meetings
