@@ -208,7 +208,7 @@ export default function DeckGenerator() {
                       <h2 className="text-base font-bold text-foreground">{result.deckTitle}</h2>
                       <p className="text-sm text-muted-foreground mt-0.5">{result.deckSubtitle}</p>
                       <div className="flex items-center gap-3 mt-2 text-xs text-muted-foreground">
-                        <span className="flex items-center gap-1"><Presentation className="w-3 h-3" />{result.estimatedDeckLength} slides</span>
+                        <span className="flex items-center gap-1"><Presentation className="w-3 h-3" />{result.slides?.length || result.estimatedDeckLength || 0} slides</span>
                         <span className="flex items-center gap-1"><CheckCircle className="w-3 h-3 text-emerald-400" />{result.promisesMade?.length || 0} promises addressed</span>
                         <span className="flex items-center gap-1"><AlertCircle className="w-3 h-3 text-amber-400" />{result.clientRequests?.length || 0} client requests covered</span>
                       </div>
