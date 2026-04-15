@@ -1,5 +1,5 @@
-import { tsToDate } from "@/lib/dateUtils";
 // @ts-nocheck
+import { tsToDate } from "@/lib/dateUtils";
 import { trpc } from "@/lib/trpc";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Activity, BarChart3, TrendingDown, TrendingUp, Zap } from "lucide-react";

@@ -1,5 +1,5 @@
-import { tsToDate } from "@/lib/dateUtils";
 // @ts-nocheck
+import { tsToDate } from "@/lib/dateUtils";
 import { trpc } from "@/lib/trpc";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -7,23 +7,24 @@ import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
-import { useState } from "react";
-import { Mail, Sparkles, Copy, Loader2, CheckCircle, RefreshCw, Trash2 } from "lucide-react";
+import { useState, useEffect } from "react";
+import { Mail, Sparkles, Copy, Loader2, CheckCircle, RefreshCw, Trash2, Info } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 
 const EMAIL_TYPES = [
   { value: "follow_up", label: "Post-Call Follow-Up" },
-  { value: "outreach", label: "Cold Outreach" },
-  { value: "proposal", label: "Proposal Send" },
+  { value: "cold_outreach", label: "Cold Outreach" },
+  { value: "proposal_follow_up", label: "Proposal Follow-Up" },
   { value: "objection_response", label: "Objection Response" },
+  { value: "demo_follow_up", label: "Post-Demo Follow-Up" },
   { value: "check_in", label: "Check-In / Nudge" },
-  { value: "meeting_request", label: "Meeting Request" },
   { value: "custom", label: "Custom" },
 ];
 
 export default function EmailGenerator() {
-  const [context, setContext] = useState("");
+  const [additionalContext, setAdditionalContext] = useState("");
   const [emailType, setEmailType] = useState("follow_up");
   const [recipientName, setRecipientName] = useState("");
   const [recipientRole, setRecipientRole] = useState("");
@@ -31,9 +32,54 @@ export default function EmailGenerator() {
   const [generatedEmail, setGeneratedEmail] = useState("");
   const [copied, setCopied] = useState(false);
   const [selectedMeetingId, setSelectedMeetingId] = useState<number | null>(null);
+  const [autoPopulated, setAutoPopulated] = useState(false);
 
   const { data: meetings } = trpc.meetings.list.useQuery({});
   const { data: savedEmails, refetch: refetchEmails } = trpc.emails.list.useQuery({});
+
+  // Fetch selected meeting details to auto-populate fields
+  const { data: selectedMeeting } = trpc.meetings.get.useQuery(
+    { id: selectedMeetingId! },
+    { enabled: !!selectedMeetingId }
+  );
+  const { data: spicedReport } = trpc.spiced.get.useQuery(
+    { meetingId: selectedMeetingId! },
+    { enabled: !!selectedMeetingId }
+  );
+
+  // Auto-populate form fields when a meeting is selected
+  useEffect(() => {
+    if (!selectedMeeting) {
+      if (!selectedMeetingId) {
+        // Cleared — reset auto-populated fields
+        setRecipientName("");
+        setRecipientRole("");
+        setCompanyName("");
+        setAdditionalContext("");
+        setAutoPopulated(false);
+      }
+      return;
+    }
+
+    // Populate recipient info from meeting data
+    if (selectedMeeting.contactName) setRecipientName(selectedMeeting.contactName);
+    if (selectedMeeting.contactTitle) setRecipientRole(selectedMeeting.contactTitle);
+    if (selectedMeeting.accountName) setCompanyName(selectedMeeting.accountName);
+
+    // Build a context summary to show the user what was auto-detected
+    const contextLines: string[] = [];
+    if (selectedMeeting.dealStage) contextLines.push(`Deal Stage: ${selectedMeeting.dealStage}`);
+    if (selectedMeeting.dealValue) contextLines.push(`Deal Value: ${selectedMeeting.dealValue}`);
+    if (spicedReport?.pain) contextLines.push(`Pain: ${spicedReport.pain}`);
+    if (spicedReport?.impact) contextLines.push(`Impact: ${spicedReport.impact}`);
+    if (spicedReport?.criticalEvent) contextLines.push(`Critical Event: ${spicedReport.criticalEvent}`);
+    if (spicedReport?.decision) contextLines.push(`Decision Process: ${spicedReport.decision}`);
+
+    if (contextLines.length > 0) {
+      setAdditionalContext(contextLines.join("\n"));
+    }
+    setAutoPopulated(true);
+  }, [selectedMeeting, spicedReport, selectedMeetingId]);
 
   const generateMutation = trpc.emails.generate.useMutation({
     onSuccess: (data) => {
@@ -41,7 +87,7 @@ export default function EmailGenerator() {
       refetchEmails();
       toast.success("Email generated");
     },
-    onError: (err) => toast.error(err.message || "Generation failed. Is Ollama running?"),
+    onError: (err) => toast.error(err.message || "Generation failed"),
   });
 
   const deleteMutation = trpc.emails.delete.useMutation({
@@ -52,7 +98,7 @@ export default function EmailGenerator() {
   });
 
   const handleGenerate = () => {
-    if (!context.trim() && !selectedMeetingId) {
+    if (!additionalContext.trim() && !selectedMeetingId) {
       toast.error("Provide context or select a meeting");
       return;
     }
@@ -62,7 +108,7 @@ export default function EmailGenerator() {
       recipientName: recipientName || undefined,
       recipientTitle: recipientRole || undefined,
       recipientCompany: companyName || undefined,
-      context: context || "Generate a professional sales email based on the meeting context.",
+      context: additionalContext || "Generate a professional sales email based on the meeting context.",
     });
   };
 
@@ -73,6 +119,17 @@ export default function EmailGenerator() {
     setTimeout(() => setCopied(false), 2000);
   };
 
+  const handleMeetingChange = (v: string) => {
+    setSelectedMeetingId(v === "none" ? null : parseInt(v));
+    setAutoPopulated(false);
+    if (v === "none") {
+      setRecipientName("");
+      setRecipientRole("");
+      setCompanyName("");
+      setAdditionalContext("");
+    }
+  };
+
   return (
     <div className="p-4 sm:p-6 space-y-6">
       <div>
@@ -81,7 +138,7 @@ export default function EmailGenerator() {
           <h1 className="text-xl sm:text-2xl font-semibold text-foreground">Email Generator</h1>
         </div>
         <p className="text-sm text-muted-foreground">
-          Generate professional, ready-to-send emails in your exact writing style — powered by local AI.
+          Select a meeting and generate a contextual, ready-to-send email — the AI uses the full transcript, pain points, and deal context automatically.
         </p>
       </div>
 
@@ -111,11 +168,12 @@ export default function EmailGenerator() {
               {/* Link to meeting */}
               <div className="space-y-1.5">
                 <Label className="text-xs font-medium text-muted-foreground">
-                  Based on Meeting <span className="text-muted-foreground/60">(optional)</span>
+                  Based on Meeting
+                  <span className="ml-1 text-primary text-[10px] font-normal">(auto-fills context)</span>
                 </Label>
                 <Select
                   value={selectedMeetingId?.toString() ?? "none"}
-                  onValueChange={(v) => setSelectedMeetingId(v === "none" ? null : parseInt(v))}
+                  onValueChange={handleMeetingChange}
                 >
                   <SelectTrigger className="bg-input border-border">
                     <SelectValue placeholder="Select a meeting..." />
@@ -124,11 +182,24 @@ export default function EmailGenerator() {
                     <SelectItem value="none">No meeting — use context below</SelectItem>
                     {(meetings || []).map((m) => (
                       <SelectItem key={m.id} value={m.id.toString()}>
-                        {m.title}
+                        <span className="truncate">{m.title}</span>
+                        {m.accountName && (
+                          <span className="ml-1 text-muted-foreground text-[10px]">· {m.accountName}</span>
+                        )}
                       </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
+
+                {/* Auto-populated indicator */}
+                {autoPopulated && selectedMeeting && (
+                  <div className="flex items-start gap-1.5 p-2 rounded bg-primary/5 border border-primary/20">
+                    <Info className="w-3 h-3 text-primary mt-0.5 shrink-0" />
+                    <p className="text-[10px] text-primary leading-relaxed">
+                      Context auto-filled from meeting data — transcript, pain points, SPICED report, and deal stage are all sent to the AI automatically. You can add extra instructions below.
+                    </p>
+                  </div>
+                )}
               </div>
 
               {/* Recipient */}
@@ -163,16 +234,20 @@ export default function EmailGenerator() {
                 />
               </div>
 
-              {/* Additional context */}
+              {/* Additional context / instructions */}
               <div className="space-y-1.5">
                 <Label className="text-xs font-medium text-muted-foreground">
-                  Additional Context / Instructions
+                  {selectedMeetingId ? "Additional Instructions" : "Context / Instructions"}
                 </Label>
                 <Textarea
-                  placeholder={`Describe what the email should cover...\n\nExamples:\n• "Follow up on the demo we did today. They were interested in AI Screener but worried about integration time. Mention the 2-week onboarding SLA."\n• "They asked for a proposal comparing us to HackerRank. Emphasize our 90% reduction in screening time."\n• "Nudge them — it's been 5 days since the demo and no response."`}
-                  value={context}
-                  onChange={(e) => setContext(e.target.value)}
-                  className="min-h-[140px] bg-input border-border text-sm resize-y"
+                  placeholder={
+                    selectedMeetingId
+                      ? `Add any extra instructions...\n\nExamples:\n• "Emphasize the 2-week onboarding SLA"\n• "They mentioned budget concerns — address ROI"\n• "Keep it very short, 3 sentences max"`
+                      : `Describe what the email should cover...\n\nExamples:\n• "Follow up on the demo we did today. They were interested in AI Screener but worried about integration time."\n• "Nudge them — it's been 5 days since the demo and no response."`
+                  }
+                  value={additionalContext}
+                  onChange={(e) => setAdditionalContext(e.target.value)}
+                  className="min-h-[120px] bg-input border-border text-sm resize-y"
                 />
               </div>
 
@@ -193,7 +268,7 @@ export default function EmailGenerator() {
 
           {/* Style note */}
           <div className="p-3 rounded-lg bg-primary/5 border border-primary/20">
-            <p className="text-[11px] text-primary font-medium mb-1">Your Writing Style</p>
+            <p className="text-[11px] text-primary font-medium mb-1">Writing Style</p>
             <p className="text-[10px] text-muted-foreground leading-relaxed">
               Clear, direct, professional but not stiff. No fluff or clichés. Short paragraphs.
               Clear ask at the end. Adapts tone to stakeholder level.
@@ -246,7 +321,7 @@ export default function EmailGenerator() {
               <Mail className="w-10 h-10 text-muted-foreground/30 mb-3" />
               <p className="text-sm font-medium text-foreground">No email generated yet</p>
               <p className="text-xs text-muted-foreground mt-1">
-                Fill in the details on the left and click Generate
+                Select a meeting on the left — context fills automatically
               </p>
             </div>
           )}
@@ -260,6 +335,7 @@ export default function EmailGenerator() {
               <CardContent className="space-y-2">
                 {(savedEmails || []).slice(0, 5).map((email) => (
                   <div
+                    key={email.id}
                     className="flex items-start gap-3 p-3 rounded-lg bg-muted/20 border border-border hover:border-border/80 cursor-pointer group"
                     onClick={() => setGeneratedEmail(email.body ?? "")}
                   >

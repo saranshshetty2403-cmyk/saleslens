@@ -75,18 +75,11 @@ export async function transcribeAudio(
 ): Promise<TranscriptionResponse | TranscriptionError> {
   try {
     // Step 1: Validate environment configuration
-    if (!ENV.forgeApiUrl) {
+    if (!ENV.llmApiKey) {
       return {
-        error: "Voice transcription service is not configured",
+        error: "Voice transcription service is not configured. Set OPENAI_API_KEY.",
         code: "SERVICE_ERROR",
-        details: "BUILT_IN_FORGE_API_URL is not set"
-      };
-    }
-    if (!ENV.forgeApiKey) {
-      return {
-        error: "Voice transcription service authentication is missing",
-        code: "SERVICE_ERROR",
-        details: "BUILT_IN_FORGE_API_KEY is not set"
+        details: "OPENAI_API_KEY is not set"
       };
     }
 
@@ -143,10 +136,10 @@ export async function transcribeAudio(
     formData.append("prompt", prompt);
 
     // Step 4: Call the transcription service
-    const baseUrl = ENV.forgeApiUrl.endsWith("/")
-      ? ENV.forgeApiUrl
-      : `${ENV.forgeApiUrl}/`;
-    
+    const baseUrl = ENV.llmApiUrl.endsWith("/")
+      ? ENV.llmApiUrl
+      : `${ENV.llmApiUrl}/`;
+
     const fullUrl = new URL(
       "v1/audio/transcriptions",
       baseUrl
@@ -155,7 +148,7 @@ export async function transcribeAudio(
     const response = await fetch(fullUrl, {
       method: "POST",
       headers: {
-        authorization: `Bearer ${ENV.forgeApiKey}`,
+        authorization: `Bearer ${ENV.llmApiKey}`,
         "Accept-Encoding": "identity",
       },
       body: formData,

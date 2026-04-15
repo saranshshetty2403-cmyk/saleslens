@@ -67,3 +67,18 @@
 ## Bug Fixes
 - [x] Fix SPICED reports: clicking a report navigates to /meetings instead of showing the report detail
 - [x] Fix SPICED reports: report detail not displayed after navigation
+
+## Manus Independence
+- [ ] Replace BUILT_IN_FORGE_API_URL/KEY with OPENAI_API_KEY in server/_core/llm.ts
+- [ ] Replace BUILT_IN_FORGE_API_URL/KEY with OPENAI_API_KEY in server/_core/voiceTranscription.ts
+- [ ] Remove Manus OAuth dependency — keep app fully public (no login wall needed)
+- [ ] Remove dead OAUTH_SERVER_URL / VITE_OAUTH_PORTAL_URL / VITE_APP_ID env references
+- [ ] Update server/vercel-app.ts to strip Manus OAuth routes
+- [ ] Set OPENAI_API_KEY on Vercel env vars
+- [ ] Build, push, verify all AI features work on Vercel with OpenAI
+
+## Email Generator Fix
+- [ ] When a meeting is selected, auto-fetch its transcript and AI analysis
+- [ ] Auto-populate recipient name, company, deal stage from meeting data
+- [ ] Auto-populate context field with: product being sold, pain points, objections, buying signals, deal stage, and key discussion points from transcript
+- [ ] Pass full enriched context to the email generation API so emails are specific and relevant

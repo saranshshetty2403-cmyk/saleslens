@@ -379,7 +379,7 @@ const prospectsRouter = router({
 // ─── Email Generator Router ───────────────────────────────────────────────────
 const emailsRouter = router({
   list: publicProcedure.input(z.object({ meetingId: z.number().optional() }).optional()).query(({ input }) => getGeneratedEmails(input?.meetingId)),
-  generate: publicProcedure.input(z.object({
+    generate: publicProcedure.input(z.object({
     meetingId: z.number().optional(),
     prospectId: z.number().optional(),
     emailType: z.enum(["follow_up","cold_outreach","objection_response","demo_follow_up","proposal_follow_up","custom"]),
@@ -398,12 +398,72 @@ const emailsRouter = router({
       custom: "custom email based on the provided context",
     };
 
-    const transcriptContext = input.transcript ? `\n\nRELEVANT TRANSCRIPT EXCERPT:\n${input.transcript.slice(0, 2000)}` : "";
+    // Auto-enrich context from meeting data when meetingId is provided
+    let enrichedContext = input.context;
+    let resolvedRecipient = input.recipientName;
+    let resolvedTitle = input.recipientTitle;
+    let resolvedCompany = input.recipientCompany;
+    let transcriptText = input.transcript ?? "";
+
+    if (input.meetingId) {
+      const [meeting, transcriptRow, analysis, spiced] = await Promise.all([
+        getMeetingById(input.meetingId),
+        getTranscriptByMeetingId(input.meetingId),
+        getAiAnalysisByMeetingId(input.meetingId),
+        getSpicedReportByMeetingId(input.meetingId),
+      ]);
+
+      if (meeting) {
+        resolvedRecipient = resolvedRecipient || meeting.contactName || undefined;
+        resolvedTitle = resolvedTitle || meeting.contactTitle || undefined;
+        resolvedCompany = resolvedCompany || meeting.accountName || undefined;
+
+        // Build rich context block from all available meeting data
+        const contextParts: string[] = [];
+
+        if (meeting.title) contextParts.push(`Meeting: ${meeting.title}`);
+        if (meeting.accountName) contextParts.push(`Account: ${meeting.accountName}`);
+        if (meeting.contactName) contextParts.push(`Contact: ${meeting.contactName}${meeting.contactTitle ? ` (${meeting.contactTitle})` : ""}`);
+        if (meeting.dealStage) contextParts.push(`Deal Stage: ${meeting.dealStage}`);
+        if (meeting.dealValue) contextParts.push(`Deal Value: ${meeting.dealValue}`);
+        if (meeting.platform) contextParts.push(`Platform: ${meeting.platform}`);
+
+        if (analysis) {
+          type AI = { text: string }[];
+          const toText = (v: unknown) => Array.isArray(v) ? (v as AI).map(i => i.text).filter(Boolean).join("; ") : "";
+          if (analysis.summary) contextParts.push(`\nMeeting Summary: ${analysis.summary}`);
+          const pp = toText(analysis.painPoints); if (pp) contextParts.push(`Pain Points Identified: ${pp}`);
+          const bs = toText(analysis.buyingSignals); if (bs) contextParts.push(`Buying Signals: ${bs}`);
+          const ob = toText(analysis.objections); if (ob) contextParts.push(`Objections Raised: ${ob}`);
+          const ns = toText(analysis.nextSteps); if (ns) contextParts.push(`Agreed Next Steps: ${ns}`);
+        }
+
+        if (spiced) {
+          if (spiced.situation) contextParts.push(`\nSituation (SPICED): ${spiced.situation}`);
+          if (spiced.pain) contextParts.push(`Pain (SPICED): ${spiced.pain}`);
+          if (spiced.impact) contextParts.push(`Impact (SPICED): ${spiced.impact}`);
+          if (spiced.criticalEvent) contextParts.push(`Critical Event: ${spiced.criticalEvent}`);
+          if (spiced.decision) contextParts.push(`Decision Process: ${spiced.decision}`);
+        }
+
+        if (transcriptRow?.fullText) {
+          transcriptText = transcriptRow.fullText;
+        }
+
+        // Prepend meeting context; append any manual context the user typed
+        const meetingContextBlock = contextParts.join("\n");
+        enrichedContext = meetingContextBlock + (input.context.trim() ? `\n\nAdditional Instructions: ${input.context}` : "");
+      }
+    }
+
+    const transcriptContext = transcriptText
+      ? `\n\nRELEVANT TRANSCRIPT EXCERPT:\n${transcriptText.slice(0, 3000)}`
+      : "";
 
     const response = await invokeLLM({
       messages: [
         { role: "system", content: EMAIL_STYLE_PROMPT + "\n\n" + HACKEREARTH_SYSTEM_PROMPT },
-        { role: "user", content: `Write a ${emailTypeDescriptions[input.emailType]} for:\n- Recipient: ${input.recipientName || "the prospect"} (${input.recipientTitle || "unknown title"}) at ${input.recipientCompany || "their company"}\n\nContext: ${input.context}${transcriptContext}\n\nProvide a subject line and email body. Format as:\nSUBJECT: [subject line]\n\n[email body]` },
+        { role: "user", content: `Write a ${emailTypeDescriptions[input.emailType]} for:\n- Recipient: ${resolvedRecipient || "the prospect"} (${resolvedTitle || "unknown title"}) at ${resolvedCompany || "their company"}\n\nContext:\n${enrichedContext}${transcriptContext}\n\nProvide a subject line and email body. Format as:\nSUBJECT: [subject line]\n\n[email body]` },
       ],
     });
 

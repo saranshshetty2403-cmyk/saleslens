@@ -1,5 +1,5 @@
-import { tsToDate } from "@/lib/dateUtils";
 // @ts-nocheck
+import { tsToDate } from "@/lib/dateUtils";
 import { trpc } from "@/lib/trpc";
 import { Card, CardContent } from "@/components/ui/card";
 import { GitBranch, Video } from "lucide-react";
@@ -30,7 +30,8 @@ export default function DealTimeline() {
   const { data: meetings } = trpc.meetings.list.useQuery({ limit: 100, offset: 0 });
 
   // Group meetings by account
-  const byAccount = (meetings || []).reduce<Record<string, typeof meetings>>((acc, meeting) => {
+  type Meeting = NonNullable<typeof meetings>[number];
+  const byAccount = (meetings || []).reduce<Record<string, Meeting[]>>((acc, meeting) => {
     const key = meeting.accountName || "Unassigned";
     if (!acc[key]) acc[key] = [];
     acc[key]!.push(meeting);

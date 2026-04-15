@@ -1,18 +1,30 @@
 /**
- * Safely convert a Unix millisecond timestamp (number or string) to a Date object.
- * The database stores timestamps as bigint/number, but superjson serializes them
- * as strings. `new Date("1776243218000")` is invalid — must use `new Date(Number(...))`.
+ * Safely convert a timestamp to a Date object.
+ *
+ * Drizzle types `timestamp` columns as `Date`, but superjson serializes them
+ * as strings over the wire (e.g. "1776243218000" for Unix-ms or ISO strings).
+ * `new Date("1776243218000")` is invalid — must use `new Date(Number(...))`.
+ *
+ * This helper handles all cases:
+ *   - Already a Date  → returned as-is
+ *   - Numeric string  → parsed via Number()
+ *   - ISO string      → parsed via new Date(str)
+ *   - number          → new Date(n)
+ *   - null/undefined  → new Date(NaN)
  */
-export function tsToDate(ts: string | number | null | undefined): Date {
+export function tsToDate(ts: Date | string | number | null | undefined): Date {
   if (ts == null) return new Date(NaN);
-  return new Date(Number(ts));
+  if (ts instanceof Date) return ts;
+  const n = Number(ts);
+  if (!isNaN(n) && String(ts).trim() !== "") return new Date(n);
+  return new Date(ts as string); // ISO string fallback
 }
 
 /**
- * Format a Unix millisecond timestamp for display. Returns empty string if invalid.
+ * Format a timestamp for display. Returns empty string if invalid.
  */
 export function formatTs(
-  ts: string | number | null | undefined,
+  ts: Date | string | number | null | undefined,
   options?: Intl.DateTimeFormatOptions
 ): string {
   const d = tsToDate(ts);
