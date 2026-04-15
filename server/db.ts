@@ -290,6 +290,15 @@ export async function deleteActionItem(id: number) {
   await db.delete(actionItems).where(eq(actionItems.id, id));
 }
 
+export async function deleteAiActionItemsByMeeting(meetingId: number) {
+  if (isPg()) { await pg.pgDeleteAiActionItemsByMeeting(meetingId); return; }
+  const db = await getDb();
+  if (!db) throw new Error("DB not available");
+  await db.delete(actionItems).where(
+    and(eq(actionItems.meetingId, meetingId), eq(actionItems.isAiGenerated, true))
+  );
+}
+
 // ─── Notes ────────────────────────────────────────────────────────────────────
 export async function upsertNote(data: InsertNote) {
   // Notes table not migrated to Postgres yet — return gracefully

@@ -8,7 +8,7 @@ import {
   searchTranscripts, upsertAiAnalysis, getAiAnalysisByMeetingId,
   upsertSpicedReport, getSpicedReportByMeetingId,
   upsertMeddpiccReport, getMeddpiccReportByMeetingId,
-  createActionItem, getActionItems, updateActionItem, deleteActionItem,
+  createActionItem, getActionItems, updateActionItem, deleteActionItem, deleteAiActionItemsByMeeting,
   upsertNote, getNoteByMeetingId, getAppSettings, upsertAppSettings,
   upsertPitchCoaching, getPitchCoachingByMeetingId,
   upsertPreCallIntelligence, getPreCallIntelligenceByMeetingId,
@@ -24,18 +24,67 @@ import {
   EMAIL_STYLE_PROMPT, HACKEREARTH_PRODUCTS, HACKEREARTH_ICP,
 } from "./hackerearth-kb";
 
-// ─── Helper: call LLM with JSON schema output ─────────────────────────────────
+// ─── LLM fallback model list ─────────────────────────────────────────────────
+const LLM_FALLBACK_MODELS = [
+  "gemini-2.0-flash",
+  "gemini-1.5-flash",
+  "gemini-1.5-flash-8b",
+  "gemini-2.0-flash-lite",
+];
+
+// ─── Helper: call LLM with JSON schema output + model fallback on quota errors ─
 async function callLLM(messages: Array<{ role: "system" | "user" | "assistant"; content: string }>, schema: Record<string, unknown>, schemaName: string) {
-  const response = await invokeLLM({
-    messages,
-    response_format: {
-      type: "json_schema",
-      json_schema: { name: schemaName, strict: true, schema },
-    },
-  });
-  const rawContent = response.choices?.[0]?.message?.content ?? "{}";
-  const content = typeof rawContent === "string" ? rawContent : "{}";
-  try { return JSON.parse(content); } catch { return {}; }
+  let lastError: Error | null = null;
+  for (const model of LLM_FALLBACK_MODELS) {
+    try {
+      const response = await invokeLLM({
+        messages,
+        response_format: {
+          type: "json_schema",
+          json_schema: { name: schemaName, strict: true, schema },
+        },
+        model,
+      });
+      const rawContent = response.choices?.[0]?.message?.content ?? "{}";
+      const content = typeof rawContent === "string" ? rawContent : "{}";
+      try { return JSON.parse(content); } catch { return {}; }
+    } catch (err: unknown) {
+      const msg = (err instanceof Error ? err.message : String(err)).toLowerCase();
+      const isQuotaOrRate = msg.includes("quota") || msg.includes("rate") || msg.includes("429") || msg.includes("resource_exhausted") || msg.includes("too many");
+      if (isQuotaOrRate) {
+        lastError = err instanceof Error ? err : new Error(String(err));
+        console.warn(`[LLM] Model ${model} quota/rate-limited, trying next fallback...`);
+        continue;
+      }
+      throw err; // Non-quota error — propagate immediately
+    }
+  }
+  throw lastError ?? new Error("All LLM models exhausted quota");
+}
+
+// ─── Helper: call LLM for plain text output + model fallback ─────────────────
+async function callLLMText(messages: Array<{ role: "system" | "user" | "assistant"; content: string }>) {
+  let lastError: Error | null = null;
+  for (const model of LLM_FALLBACK_MODELS) {
+    try {
+      const response = await invokeLLM({
+        messages,
+        model,
+      });
+      const rawContent = response.choices?.[0]?.message?.content ?? "";
+      return typeof rawContent === "string" ? rawContent : "";
+    } catch (err: unknown) {
+      const msg = (err instanceof Error ? err.message : String(err)).toLowerCase();
+      const isQuotaOrRate = msg.includes("quota") || msg.includes("rate") || msg.includes("429") || msg.includes("resource_exhausted") || msg.includes("too many");
+      if (isQuotaOrRate) {
+        lastError = err instanceof Error ? err : new Error(String(err));
+        console.warn(`[LLM] Model ${model} quota/rate-limited, trying next fallback...`);
+        continue;
+      }
+      throw err;
+    }
+  }
+  throw lastError ?? new Error("All LLM models exhausted quota");
 }
 
 // ─── Meetings Router ──────────────────────────────────────────────────────────
@@ -258,6 +307,9 @@ const analyzeRouter = router({
       upsertPreCallIntelligence({ meetingId, ...preCall }),
     ]);
 
+    // Clear old AI-generated action items before re-inserting (prevents duplicates on re-run)
+    await deleteAiActionItemsByMeeting(meetingId);
+
     // Save action items
     if (analysis.nextSteps?.length) {
       for (const step of analysis.nextSteps.slice(0, 5)) {
@@ -479,15 +531,10 @@ const emailsRouter = router({
       }
     }
 
-    const response = await invokeLLM({
-      messages: [
-        { role: "system", content: `You are an expert B2B sales email writer for HackerEarth, a developer assessment and hiring platform.${styleBlock}\n\n${HACKEREARTH_SYSTEM_PROMPT}\n\nWrite professional, concise, high-converting sales emails. Always output in this exact format:\nSUBJECT: [subject line]\n\n[email body]` },
-        { role: "user", content: `Write an email with the following intent:\n${input.prompt}${meetingContextBlock}` },
-      ],
-    });
-
-    const rawContent = response.choices?.[0]?.message?.content ?? "";
-    const content = typeof rawContent === "string" ? rawContent : "";
+    const content = await callLLMText([
+      { role: "system", content: `You are an expert B2B sales email writer for HackerEarth, a developer assessment and hiring platform.${styleBlock}\n\n${HACKEREARTH_SYSTEM_PROMPT}\n\nWrite professional, concise, high-converting sales emails. Always output in this exact format:\nSUBJECT: [subject line]\n\n[email body]` },
+      { role: "user", content: `Write an email with the following intent:\n${input.prompt}${meetingContextBlock}` },
+    ]);
     const subjectMatch = content.match(/^SUBJECT:\s*(.+)$/m);
     const subject = subjectMatch?.[1]?.trim() ?? "Following up";
     const body = content.replace(/^SUBJECT:\s*.+\n\n?/m, "").trim();
@@ -514,38 +561,21 @@ const emailsRouter = router({
     const accepted = await getAcceptedEmails(10);
     if (accepted.length >= 2) {
       const samples = accepted.map((e, i) => `--- Email ${i + 1} ---\nSubject: ${e.subject}\n${e.userEdits || e.body}`).join("\n\n");
-      const learnResponse = await invokeLLM({
-        messages: [
+      const profile = await callLLM([
           { role: "system", content: "You are analyzing a sales rep's accepted emails to extract their writing style preferences. Return a JSON object with: tone (string), avgLength (string: e.g. 'concise under 150 words'), openingStyle (string), closingStyle (string), preferredPhrases (array of strings), avoidPhrases (array of strings), structureNotes (string), learnedAt (ISO timestamp string), samplesAnalyzed (number)." },
           { role: "user", content: `Analyze these emails the rep accepted/used and extract their style preferences:\n\n${samples}` },
-        ],
-        response_format: {
-          type: "json_schema",
-          json_schema: {
-            name: "email_style_profile",
-            strict: true,
-            schema: {
-              type: "object",
-              properties: {
-                tone: { type: "string" },
-                avgLength: { type: "string" },
-                openingStyle: { type: "string" },
-                closingStyle: { type: "string" },
-                preferredPhrases: { type: "array", items: { type: "string" } },
-                avoidPhrases: { type: "array", items: { type: "string" } },
-                structureNotes: { type: "string" },
-                learnedAt: { type: "string" },
-                samplesAnalyzed: { type: "number" },
-              },
-              required: ["tone", "avgLength", "openingStyle", "closingStyle", "preferredPhrases", "avoidPhrases", "structureNotes", "learnedAt", "samplesAnalyzed"],
-              additionalProperties: false,
-            },
+        ], {
+          type: "object",
+          properties: {
+            tone: { type: "string" }, avgLength: { type: "string" }, openingStyle: { type: "string" },
+            closingStyle: { type: "string" }, preferredPhrases: { type: "array", items: { type: "string" } },
+            avoidPhrases: { type: "array", items: { type: "string" } }, structureNotes: { type: "string" },
+            learnedAt: { type: "string" }, samplesAnalyzed: { type: "number" },
           },
-        },
-      });
+          required: ["tone","avgLength","openingStyle","closingStyle","preferredPhrases","avoidPhrases","structureNotes","learnedAt","samplesAnalyzed"],
+          additionalProperties: false,
+        }, "email_style_profile");
       try {
-        const raw = learnResponse.choices?.[0]?.message?.content ?? "{}";
-        const profile = JSON.parse(typeof raw === "string" ? raw : "{}");
         await updateEmailStyleProfile(profile);
       } catch { /* ignore parse errors */ }
     }
@@ -617,37 +647,24 @@ const dealSummaryRouter = router({
         return parts.join("\n");
       }).join("\n\n");
 
-      const response = await invokeLLM({
-        messages: [
+      const summary = await callLLM([
           { role: "system", content: `You are a senior sales analyst. Analyze multiple sales calls with the same account and produce a consolidated deal summary. Return a JSON object with these fields: narrative (string, 2-3 paragraph deal story), consolidatedMeddpicc (object with keys: metrics, economicBuyer, decisionCriteria, decisionProcess, identifyPain, champion, competition, each a string), consolidatedSpiced (object with keys: situation, pain, impact, criticalEvent, decision, each a string), healthScore (number 1-10), healthTrend (array of objects with callIndex and score), risks (array of strings), momentumSignals (array of strings), recommendedNextAction (string).` },
           { role: "user", content: `Account: ${account.name}\nTotal Calls: ${accountMeetings.length}\n\n${callSummaries}` },
-        ],
-        response_format: {
-          type: "json_schema",
-          json_schema: {
-            name: "deal_summary",
-            strict: true,
-            schema: {
-              type: "object",
-              properties: {
-                narrative: { type: "string" },
-                consolidatedMeddpicc: { type: "object", properties: { metrics: { type: "string" }, economicBuyer: { type: "string" }, decisionCriteria: { type: "string" }, decisionProcess: { type: "string" }, identifyPain: { type: "string" }, champion: { type: "string" }, competition: { type: "string" } }, required: ["metrics","economicBuyer","decisionCriteria","decisionProcess","identifyPain","champion","competition"], additionalProperties: false },
-                consolidatedSpiced: { type: "object", properties: { situation: { type: "string" }, pain: { type: "string" }, impact: { type: "string" }, criticalEvent: { type: "string" }, decision: { type: "string" } }, required: ["situation","pain","impact","criticalEvent","decision"], additionalProperties: false },
-                healthScore: { type: "number" },
-                healthTrend: { type: "array", items: { type: "object", properties: { callIndex: { type: "number" }, score: { type: "number" } }, required: ["callIndex","score"], additionalProperties: false } },
-                risks: { type: "array", items: { type: "string" } },
-                momentumSignals: { type: "array", items: { type: "string" } },
-                recommendedNextAction: { type: "string" },
-              },
-              required: ["narrative","consolidatedMeddpicc","consolidatedSpiced","healthScore","healthTrend","risks","momentumSignals","recommendedNextAction"],
-              additionalProperties: false,
-            },
+        ], {
+          type: "object",
+          properties: {
+            narrative: { type: "string" },
+            consolidatedMeddpicc: { type: "object", properties: { metrics: { type: "string" }, economicBuyer: { type: "string" }, decisionCriteria: { type: "string" }, decisionProcess: { type: "string" }, identifyPain: { type: "string" }, champion: { type: "string" }, competition: { type: "string" } }, required: ["metrics","economicBuyer","decisionCriteria","decisionProcess","identifyPain","champion","competition"], additionalProperties: false },
+            consolidatedSpiced: { type: "object", properties: { situation: { type: "string" }, pain: { type: "string" }, impact: { type: "string" }, criticalEvent: { type: "string" }, decision: { type: "string" } }, required: ["situation","pain","impact","criticalEvent","decision"], additionalProperties: false },
+            healthScore: { type: "number" },
+            healthTrend: { type: "array", items: { type: "object", properties: { callIndex: { type: "number" }, score: { type: "number" } }, required: ["callIndex","score"], additionalProperties: false } },
+            risks: { type: "array", items: { type: "string" } },
+            momentumSignals: { type: "array", items: { type: "string" } },
+            recommendedNextAction: { type: "string" },
           },
-        },
-      });
-
-      const raw = response.choices?.[0]?.message?.content ?? "{}";
-      const summary = JSON.parse(typeof raw === "string" ? raw : "{}");
+          required: ["narrative","consolidatedMeddpicc","consolidatedSpiced","healthScore","healthTrend","risks","momentumSignals","recommendedNextAction"],
+          additionalProperties: false,
+        }, "deal_summary");
 
       await upsertDealSummary({
         accountId: input.accountId,

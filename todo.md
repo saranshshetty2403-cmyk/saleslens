@@ -125,3 +125,16 @@
 - [x] Add delete button to Meetings list page (per-row, with confirmation)
 - [x] Add delete button to Meeting Detail page header (with confirmation dialog)
 - [x] After deletion, redirect to /meetings
+
+## Bug: Duplicate Action Items
+- [x] Diagnose why action items are duplicated (re-running analyze, no dedup on insert)
+- [x] Fix: clear existing AI-generated action items before re-generating for same meeting
+
+## Feature: LLM Fallback on Quota Errors
+- [x] Create callLLM() and callLLMText() wrappers that retry with alternate models on quota/rate-limit errors
+- [x] Fallback model chain: gemini-2.0-flash → gemini-1.5-flash → gemini-1.5-flash-8b → gemini-2.0-flash-lite
+- [x] Apply fallback to: analyze.full (all 6 parallel LLM calls via callLLM)
+- [x] Apply fallback to: email generator (callLLMText)
+- [x] Apply fallback to: email style learning (callLLM)
+- [x] Apply fallback to: deck generator (already used callLLM)
+- [x] Apply fallback to: deal summary generation (callLLM)

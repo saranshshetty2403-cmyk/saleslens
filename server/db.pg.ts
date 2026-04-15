@@ -480,6 +480,12 @@ export async function pgDeleteActionItem(id: number) {
   await sql`DELETE FROM action_items WHERE id = ${id}`;
 }
 
+export async function pgDeleteAiActionItemsByMeeting(meetingId: number) {
+  const sql = getPgSql();
+  if (!sql) throw new Error("DB not available");
+  await sql`DELETE FROM action_items WHERE "meetingId" = ${meetingId} AND "isAiGenerated" = true`;
+}
+
 // ─── Pitch Coaching ───────────────────────────────────────────────────────────
 
 export async function pgUpsertPitchCoaching(data: {
