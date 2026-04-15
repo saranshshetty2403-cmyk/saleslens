@@ -1,4 +1,7 @@
 export const ENV = {
+  // External LLM provider keys for fallback chain
+  groqApiKey: process.env.GROQ_API_KEY ?? "",
+  openRouterApiKey: process.env.OPENROUTER_API_KEY ?? "",
   appId: process.env.VITE_APP_ID ?? "",
   cookieSecret: process.env.JWT_SECRET ?? "saleslens-default-secret",
   databaseUrl: process.env.DATABASE_URL ?? "",

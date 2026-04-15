@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { publicProcedure, router } from "./_core/trpc";
 import { systemRouter } from "./_core/systemRouter";
-import { invokeLLM } from "./_core/llm";
+import { ENV } from "./_core/env";
 import {
   createMeeting, getMeetings, getMeetingById, updateMeeting, deleteMeeting,
   searchMeetings, getMeetingStats, upsertTranscript, getTranscriptByMeetingId,
@@ -24,81 +24,156 @@ import {
   EMAIL_STYLE_PROMPT, HACKEREARTH_PRODUCTS, HACKEREARTH_ICP,
 } from "./hackerearth-kb";
 
-// ─── LLM fallback model list ─────────────────────────────────────────────────
-/** Returns true if the error message indicates a quota/rate-limit problem */
+// ─── Multi-provider LLM fallback chain ────────────────────────────────────────
+
+/** Returns true if the error indicates a quota/rate-limit/capacity problem */
 function isQuotaError(msg: string): boolean {
+  const lower = msg.toLowerCase();
   return (
-    msg.includes("quota") ||
-    msg.includes("rate") ||
-    msg.includes("429") ||
-    msg.includes("resource_exhausted") ||
-    msg.includes("too many") ||
-    msg.includes("limit exceeded") ||
-    msg.includes("capacity") ||
-    msg.includes("overloaded") ||
-    msg.includes("temporarily unavailable")
+    lower.includes("quota") ||
+    lower.includes("rate") ||
+    lower.includes("429") ||
+    lower.includes("resource_exhausted") ||
+    lower.includes("too many") ||
+    lower.includes("limit exceeded") ||
+    lower.includes("capacity") ||
+    lower.includes("overloaded") ||
+    lower.includes("temporarily unavailable") ||
+    lower.includes("service unavailable") ||
+    lower.includes("insufficient_quota") ||
+    lower.includes("model_not_available")
   );
 }
-const LLM_FALLBACK_MODELS = [
-  "gemini-2.0-flash",
-  "gemini-1.5-flash",
-  "gemini-1.5-flash-8b",
-  "gemini-2.0-flash-lite",
-];
 
-// ─── Helper: call LLM with JSON schema output + model fallback on quota errors ─
-async function callLLM(messages: Array<{ role: "system" | "user" | "assistant"; content: string }>, schema: Record<string, unknown>, schemaName: string) {
-  let lastError: Error | null = null;
-  for (const model of LLM_FALLBACK_MODELS) {
-    try {
-      const response = await invokeLLM({
-        messages,
-        response_format: {
-          type: "json_schema",
-          json_schema: { name: schemaName, strict: true, schema },
-        },
-        model,
-      });
-      const rawContent = response.choices?.[0]?.message?.content ?? "{}";
-      const content = typeof rawContent === "string" ? rawContent : "{}";
-      try { return JSON.parse(content); } catch { return {}; }
-    } catch (err: unknown) {      const msg = (err instanceof Error ? err.message : String(err)).toLowerCase();
-      const isQuotaOrRate = isQuotaError(msg);
-      if (isQuotaOrRate) {
-        lastError = err instanceof Error ? err : new Error(String(err));
-        console.warn(`[LLM] Model ${model} quota/rate-limited, trying next fallback... (${msg.slice(0, 120)})`);
-        continue;
-      }
-      throw err; // Non-quota error — propagate immediately
+type LLMProvider = {
+  name: string;
+  model: string;
+  apiUrl: string;
+  apiKey: string;
+  supportsJsonSchema: boolean;
+};
+
+function buildProviders(): LLMProvider[] {
+  const providers: LLMProvider[] = [
+    // 1. Manus built-in Gemini models
+    { name: "manus/gemini-2.0-flash",    model: "gemini-2.0-flash",    apiUrl: ENV.llmApiUrl, apiKey: ENV.llmApiKey, supportsJsonSchema: true },
+    { name: "manus/gemini-1.5-flash",    model: "gemini-1.5-flash",    apiUrl: ENV.llmApiUrl, apiKey: ENV.llmApiKey, supportsJsonSchema: true },
+    { name: "manus/gemini-1.5-flash-8b", model: "gemini-1.5-flash-8b", apiUrl: ENV.llmApiUrl, apiKey: ENV.llmApiKey, supportsJsonSchema: true },
+  ];
+  // 2. Groq — free tier, 14,400 RPD on llama-3.1-8b, 1,000 RPD on llama-3.3-70b
+  if (ENV.groqApiKey) {
+    providers.push(
+      { name: "groq/llama-3.3-70b", model: "llama-3.3-70b-versatile",  apiUrl: "https://api.groq.com/openai", apiKey: ENV.groqApiKey, supportsJsonSchema: false },
+      { name: "groq/llama-3.1-8b", model: "llama-3.1-8b-instant",     apiUrl: "https://api.groq.com/openai", apiKey: ENV.groqApiKey, supportsJsonSchema: false },
+    );
+  }
+  // 3. OpenRouter — free models, auto-selects best available
+  if (ENV.openRouterApiKey) {
+    providers.push(
+      { name: "openrouter/llama-3.3-70b", model: "meta-llama/llama-3.3-70b-instruct:free", apiUrl: "https://openrouter.ai/api", apiKey: ENV.openRouterApiKey, supportsJsonSchema: false },
+      { name: "openrouter/gemma-3-27b",   model: "google/gemma-3-27b-it:free",              apiUrl: "https://openrouter.ai/api", apiKey: ENV.openRouterApiKey, supportsJsonSchema: false },
+      { name: "openrouter/auto",          model: "openrouter/auto",                         apiUrl: "https://openrouter.ai/api", apiKey: ENV.openRouterApiKey, supportsJsonSchema: false },
+    );
+  }
+  return providers;
+}
+
+async function callProviderRaw(
+  provider: LLMProvider,
+  messages: Array<{ role: "system" | "user" | "assistant"; content: string }>,
+  responseFormat?: Record<string, unknown>,
+): Promise<string> {
+  const base = provider.apiUrl.replace(/\/$/, "");
+  const url = `${base}/v1/chat/completions`;
+  let finalMessages = messages;
+  const payload: Record<string, unknown> = { model: provider.model, messages: finalMessages, max_tokens: 8192 };
+  if (responseFormat) {
+    if (provider.supportsJsonSchema) {
+      payload.response_format = responseFormat;
+    } else {
+      // Inject JSON instruction for providers that don't support json_schema
+      const hasSystem = finalMessages.some(m => m.role === "system");
+      const jsonInstruction = "\n\nIMPORTANT: Respond with valid JSON only. No markdown fences, no explanation, just the JSON object.";
+      finalMessages = hasSystem
+        ? finalMessages.map(m => m.role === "system" ? { ...m, content: m.content + jsonInstruction } : m)
+        : [{ role: "system" as const, content: "Respond with valid JSON only. No markdown fences, no explanation." }, ...finalMessages];
+      payload.messages = finalMessages;
     }
   }
-  console.error("[LLM] All fallback models exhausted quota. Last error:", lastError?.message);
-  throw new Error("AI generation is temporarily unavailable due to high demand. Please try again in a few minutes.");
+  const headers: Record<string, string> = {
+    "content-type": "application/json",
+    "authorization": `Bearer ${provider.apiKey}`,
+  };
+  if (provider.apiUrl.includes("openrouter.ai")) {
+    headers["HTTP-Referer"] = "https://saleslens.manus.space";
+    headers["X-Title"] = "SalesLens";
+  }
+  const response = await fetch(url, { method: "POST", headers, body: JSON.stringify(payload) });
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(`LLM [${provider.name}] ${response.status} ${response.statusText} – ${errorText}`);
+  }
+  const json = await response.json() as Record<string, unknown>;
+  if (json && "error" in json) {
+    const errObj = json.error;
+    const errMsg = typeof errObj === "string" ? errObj : JSON.stringify(errObj);
+    throw new Error(`LLM [${provider.name}] 200 OK but error in body – ${errMsg}`);
+  }
+  const choices = (json as { choices?: Array<{ message?: { content?: unknown } }> }).choices;
+  const raw = choices?.[0]?.message?.content ?? "";
+  return typeof raw === "string" ? raw : "";
 }
-// ─── Helper: call LLM for plain text output + model fallback ─────────────────────
-async function callLLMText(messages: Array<{ role: "system" | "user" | "assistant"; content: string }>) {
+
+// ─── callLLM: JSON schema output with multi-provider fallback ─────────────────
+async function callLLM(
+  messages: Array<{ role: "system" | "user" | "assistant"; content: string }>,
+  schema: Record<string, unknown>,
+  schemaName: string,
+) {
+  const providers = buildProviders();
   let lastError: Error | null = null;
-  for (const model of LLM_FALLBACK_MODELS) {
+  for (const provider of providers) {
     try {
-      const response = await invokeLLM({
-        messages,
-        model,
-      });
-      const rawContent = response.choices?.[0]?.message?.content ?? "";
-      return typeof rawContent === "string" ? rawContent : "";
+      const responseFormat = { type: "json_schema", json_schema: { name: schemaName, strict: true, schema } };
+      const raw = await callProviderRaw(provider, messages, responseFormat);
+      const cleaned = raw.replace(/^```(?:json)?\s*/i, "").replace(/\s*```\s*$/i, "").trim();
+      try { return JSON.parse(cleaned); } catch { return {}; }
     } catch (err: unknown) {
-      const msg = (err instanceof Error ? err.message : String(err)).toLowerCase();
-      const isQuotaOrRate = isQuotaError(msg);
-      if (isQuotaOrRate) {
-        lastError = err instanceof Error ? err : new Error(String(err));
-        console.warn(`[LLM] Model ${model} quota/rate-limited, trying next fallback... (${msg.slice(0, 120)})`);
+      const msg = err instanceof Error ? err.message : String(err);
+      if (isQuotaError(msg)) {
+        lastError = err instanceof Error ? err : new Error(msg);
+        console.warn(`[LLM] ${provider.name} quota/rate-limited, trying next... (${msg.slice(0, 120)})`);
         continue;
       }
       throw err;
     }
   }
-  console.error("[LLM] All fallback models exhausted quota. Last error:", lastError?.message);
-  throw new Error("AI generation is temporarily unavailable due to high demand. Please try again in a few minutes.");
+  console.error("[LLM] All providers exhausted. Last error:", lastError?.message);
+  throw new Error("AI generation is temporarily unavailable. All LLM providers are at capacity. Please try again in a few minutes.");
+}
+
+// ─── callLLMText: plain text output with multi-provider fallback ──────────────
+async function callLLMText(
+  messages: Array<{ role: "system" | "user" | "assistant"; content: string }>,
+) {
+  const providers = buildProviders();
+  let lastError: Error | null = null;
+  for (const provider of providers) {
+    try {
+      const raw = await callProviderRaw(provider, messages);
+      return raw;
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      if (isQuotaError(msg)) {
+        lastError = err instanceof Error ? err : new Error(msg);
+        console.warn(`[LLM] ${provider.name} quota/rate-limited, trying next... (${msg.slice(0, 120)})`);
+        continue;
+      }
+      throw err;
+    }
+  }
+  console.error("[LLM] All providers exhausted. Last error:", lastError?.message);
+  throw new Error("AI generation is temporarily unavailable. All LLM providers are at capacity. Please try again in a few minutes.");
 }// ─── Meetings Router ──────────────────────────────────────────────────────────
 const meetingsRouter = router({
   list: publicProcedure.input(z.object({ limit: z.number().optional(), offset: z.number().optional(), search: z.string().optional() }).optional()).query(async ({ input }) => {

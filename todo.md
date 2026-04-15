@@ -154,3 +154,13 @@
 - [x] Custom deck generated: HackerEarth hackathon case studies relevant to Simular AI
 - [x] 11 slides generated, 7 client requests recognized, 4 case study slides included
 - [x] TinyFish AI agent hackathon reference correctly included
+
+## Feature: Multi-Provider LLM Fallback Chain
+- [x] Add GROQ_API_KEY secret to project
+- [x] Add OPENROUTER_API_KEY secret to project
+- [x] Build callProviderRaw() that makes direct fetch calls to any OpenAI-compatible endpoint
+- [x] Fallback chain: Manus gemini-2.0-flash → gemini-1.5-flash → gemini-1.5-flash-8b → Groq llama-3.3-70b → Groq llama-3.1-8b → OpenRouter llama-3.3-70b:free → OpenRouter gemma-3-27b:free → OpenRouter auto
+- [x] Apply to callLLM (JSON output) and callLLMText (plain text) — covers all 10 LLM calls
+- [x] Groq test: PASSED (llama-3.1-8b-instant responds in ~1.8s)
+- [x] OpenRouter test: PASSED (gemma-3-27b:free responds as fallback when llama is rate-limited)
+- [x] Zero direct invokeLLM calls remain in any module
